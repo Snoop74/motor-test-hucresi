@@ -1,8 +1,14 @@
 # Motor Test Hücresi
 
-Tek dosyalık tarayıcı simülatörü: `motor.html` (Türkçe arayüz, kütüphane yok, canvas + WebAudio).
-Dosya claude.ai artifact olarak yayınlanır; bu yüzden `<!doctype>/<html>/<head>/<body>` etiketleri YOK
-(yayında eklenir). Yerelde test için başına doctype ekleyen bir kopya üzerinden HTTP sunucusuyla açın.
+Tarayıcı simülatörü: `motor.html` (düzen + CSS) ve `js/` altındaki betikler (Türkçe arayüz, canvas + WebAudio).
+claude.ai artifact olarak yayınlanır (`files` ile js/ dosyaları da gönderilir); bu yüzden motor.html'de
+`<!doctype>/<html>/<head>/<body>` etiketleri YOK (yayında eklenir).
+Yerel test: `./.mktest.sh` → `.test.html` (doctype + önbellek kırıcı), sonra `python -m http.server` ile açın.
+
+Dosyalar: `js/core.js` (fizik+ECU, DOM'suz), `js/shared.js` (ses, motor değiştirme, ana döngü, VIEWS),
+`js/lab.js` (laboratuvar), `js/garage.js` (garaj). Görünümler `VIEWS.<ad>` olarak kaydolur.
+Motorlar `ENGINES` dizisinde; `applyEngine()` + `createSim()` ile değiştirilir (`switchEngine(id)`).
+Motor parametresi değişirse dinamometreyle yeniden ölçüp `FACTORY_DYNO`'yu güncelleyin.
 
 ## Yapı
 - `<script id="core">` — DOM'suz fizik + ECU. SI birimleri, açılar derece.
