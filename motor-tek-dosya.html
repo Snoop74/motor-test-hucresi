@@ -1,0 +1,1688 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>
+<title>Motor Test Hücresi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: dyno test-cell control room. Top row = engine cutaway + instrument cluster; middle = scopes; bottom = ECU laptop with tabs. Single dark look by choice (instrument backlight). */
+:root{
+  color-scheme:dark;
+  --bg:#0b0e11; --panel:#12171c; --panel2:#171e25; --face:#0e1317; --line:#253039; --line2:#33414d;
+  --ink:#dbe2e7; --mute:#8592a0; --dim:#56636f;
+  --amber:#ffad40; --cyan:#45c1db; --flame:#ff6a2b; --violet:#b08cff; --steel:#9fb0bd;
+  --ok:#59cd78; --warn:#f3c544; --crit:#ff5050;
+  --f-disp:"Chakra Petch","Bahnschrift","Segoe UI",sans-serif;
+  --f-body:"Barlow","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.4;margin:0;padding-block:12px 28px;padding-inline:16px}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.top{max-width:1560px;margin:0 auto 12px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 20px}
+.brand h1{font-family:var(--f-disp);font-weight:700;font-size:22px;letter-spacing:.08em;margin:0;text-transform:uppercase}
+.brand h1 b{color:var(--amber);font-weight:700}
+.spec{font-family:var(--f-mono);font-size:11.5px;color:var(--mute);letter-spacing:.02em}
+.status{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pill{font-family:var(--f-disp);font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:3px;border:1px solid var(--line2);color:var(--mute);background:var(--panel)}
+.pill.on{color:var(--bg);background:var(--ok);border-color:var(--ok)}
+.pill.warn{color:var(--bg);background:var(--warn);border-color:var(--warn)}
+.pill.crit{color:var(--bg);background:var(--crit);border-color:var(--crit)}
+.app{max-width:1560px;margin:0 auto;display:grid;gap:12px;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}
+@media (max-width:1000px){.app{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.card.wide{grid-column:1/-1}
+.hd{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.hd h2{font-family:var(--f-disp);font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin:0;color:var(--steel)}
+.hd h2 span{color:var(--amber)}
+canvas{display:block;width:100%;max-width:100%}
+#cvEngine{aspect-ratio:16/11;max-height:560px;background:var(--face);border-radius:3px;border:1px solid var(--line)}
+@media (max-width:600px){#cvEngine{aspect-ratio:1/1.05}}
+#cvStrip{height:104px;background:var(--face);border-radius:3px;border:1px solid var(--line);cursor:pointer}
+#cvGauge{aspect-ratio:16/10.5;background:var(--face);border-radius:3px;border:1px solid var(--line)}
+#cvScope,#cvCyl{height:250px;background:var(--face);border-radius:3px;border:1px solid var(--line)}
+#cvDyno{height:300px;background:var(--face);border-radius:3px;border:1px solid var(--line)}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:4px;overflow:hidden;flex-wrap:wrap}
+.seg button{background:var(--panel2);border:0;border-right:1px solid var(--line2);padding:5px 10px;cursor:pointer;font-size:12.5px;color:var(--mute)}
+.seg button:last-child{border-right:0}
+.seg button.act{background:var(--amber);color:var(--bg);font-weight:600}
+.seg button:hover:not(.act){color:var(--ink)}
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:4px;padding:7px 12px;cursor:pointer;font-weight:600;font-size:13px;user-select:none;-webkit-user-select:none;touch-action:none}
+.btn:hover{border-color:var(--steel)}
+.btn.key.on{background:var(--ok);color:var(--bg);border-color:var(--ok)}
+.btn.start{border-color:var(--amber);color:var(--amber)}
+.btn.start.held{background:var(--amber);color:var(--bg)}
+.btn.small{padding:4px 9px;font-size:12px;font-weight:500}
+.btn.danger{border-color:var(--crit);color:var(--crit)}
+.kbd{font-family:var(--f-mono);font-size:10.5px;color:var(--dim);border:1px solid var(--line2);border-radius:3px;padding:0 4px;margin-left:4px}
+.btn .kbd{color:inherit;opacity:.7;border-color:currentColor}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 14px}
+.ctl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.lab{font-family:var(--f-disp);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input[type=range]{width:100%;accent-color:var(--amber)}
+.pedal{display:flex;gap:10px;align-items:center}
+.pedal output{font-family:var(--f-mono);min-width:48px;text-align:right;color:var(--amber)}
+.hint{font-size:12px;color:var(--mute)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--f-mono);font-size:11px;padding:3px 8px;border-radius:3px;border:1px solid var(--line2);background:var(--panel2);cursor:pointer;color:var(--mute);display:inline-flex;gap:6px;align-items:center}
+.chip i{width:9px;height:3px;border-radius:2px;display:inline-block}
+.chip.on{color:var(--ink);border-color:var(--steel)}
+.chip b{font-weight:600;color:var(--ink);min-width:44px;text-align:right}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:4px 12px;font-family:var(--f-mono);font-size:12px}
+.stats div{display:flex;justify-content:space-between;gap:6px;border-bottom:1px dotted var(--line2);padding:2px 0}
+.stats span{color:var(--mute)}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line2);overflow-x:auto}
+.tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:7px 12px;cursor:pointer;color:var(--mute);font-family:var(--f-disp);font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.tabs button.act{color:var(--amber);border-bottom-color:var(--amber)}
+.tabs button .badge{background:var(--crit);color:var(--bg);border-radius:8px;padding:0 6px;font-size:10px;margin-left:6px;font-family:var(--f-mono)}
+.pane{padding-top:10px;min-width:0}
+.live{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0 18px;font-family:var(--f-mono);font-size:12.5px}
+.live div{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}
+.live span{color:var(--mute);font-family:var(--f-body)}
+.live b{font-weight:600;font-variant-numeric:tabular-nums}
+.live b.g{color:var(--ok)} .live b.y{color:var(--warn)} .live b.r{color:var(--crit)}
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:3px}
+table.map{border-collapse:collapse;font-family:var(--f-mono);font-size:11px;font-variant-numeric:tabular-nums}
+table.map th{background:var(--panel2);color:var(--mute);font-weight:400;padding:3px 5px;position:sticky;left:0}
+table.map thead th{position:static}
+table.map td{padding:3px 4px;text-align:center;min-width:38px;cursor:pointer;color:#0b0e11;border:1px solid transparent}
+table.map td.sel{outline:2px solid var(--ink);outline-offset:-2px}
+table.map td.op{border-color:#fff;box-shadow:inset 0 0 0 1px #000}
+.maptools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px 22px}
+.f{display:flex;flex-direction:column;gap:4px}
+.f label{font-size:12.5px;color:var(--mute);display:flex;justify-content:space-between;gap:6px}
+.f label b{color:var(--ink);font-family:var(--f-mono);font-weight:600}
+.f select{background:var(--panel2);border:1px solid var(--line2);border-radius:3px;padding:4px 6px}
+.check{display:flex;gap:10px;align-items:flex-start;padding:7px 9px;border:1px solid var(--line);border-radius:4px;background:var(--panel2);cursor:pointer}
+.check input{margin-top:3px;accent-color:var(--amber)}
+.check b{display:block;font-weight:600;font-size:13px}
+.check small{color:var(--mute);font-size:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:8px}
+.dtc{display:flex;gap:12px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line)}
+.dtc code{font-family:var(--f-mono);color:var(--crit);font-weight:600;min-width:52px}
+.empty{color:var(--mute);padding:10px 0}
+.mod{border:1px solid var(--line);border-radius:4px;padding:10px;background:var(--panel2);display:flex;flex-direction:column;gap:8px}
+.mod h3{margin:0;font-family:var(--f-disp);font-size:14px;letter-spacing:.06em;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.mod p{margin:0;font-size:12.5px;color:var(--mute)}
+.toggle{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--mute);cursor:pointer}
+.toggle input{accent-color:var(--amber)}
+.note{font-size:12px;color:var(--mute);max-width:75ch}
+.foot{max-width:1560px;margin:14px auto 0;font-size:12px;color:var(--dim);display:flex;flex-wrap:wrap;gap:6px 18px}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+.viewnav{display:flex;gap:4px;flex-wrap:wrap}
+.viewnav button{background:var(--panel);border:1px solid var(--line2);color:var(--mute);font-family:var(--f-disp);font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:7px 14px;border-radius:4px;cursor:pointer}
+.viewnav button.act{background:var(--amber);border-color:var(--amber);color:var(--bg);font-weight:700}
+.viewnav button:hover:not(.act){color:var(--ink)}
+.view{max-width:1560px;margin:0 auto}
+.btn.pri{background:var(--amber);border-color:var(--amber);color:var(--bg)}
+.garage-hd{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:6px 18px;margin:0 0 12px}
+.garage-hd h2{font-family:var(--f-disp);font-size:20px;letter-spacing:.06em;margin:0}
+.garage-hd p{margin:0;color:var(--mute);max-width:70ch}
+.ggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.eng{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--ec);border-radius:5px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.eng.sel{border-color:var(--amber);border-top-color:var(--ec);box-shadow:0 0 0 1px var(--amber)}
+.eng-top{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em}
+.eng-tag{color:var(--ink);border:1px solid var(--line2);border-radius:3px;padding:1px 7px}
+.eng h3{margin:0;font-family:var(--f-disp);font-size:18px;letter-spacing:.03em;text-wrap:balance}
+.eng-sub{font-family:var(--f-mono);font-size:12px;color:var(--steel)}
+.eng-curve{height:92px;border:1px solid var(--line);border-radius:3px}
+.eng-nums{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:0}
+.eng-nums div{background:var(--panel2);border-radius:3px;padding:5px 7px}
+.eng-nums dt{font-size:10.5px;color:var(--mute);text-transform:uppercase;letter-spacing:.1em}
+.eng-nums dd{margin:0;font-family:var(--f-mono);font-weight:600;font-size:15px;font-variant-numeric:tabular-nums}
+.eng-nums small{display:block;font-weight:400;font-size:10.5px;color:var(--mute)}
+.eng-blurb{margin:0;font-size:13px;color:var(--mute)}
+.eng-veh{font-size:12.5px;display:flex;align-items:center;gap:7px}
+.eng-veh .sw{width:12px;height:12px;border-radius:2px;background:var(--ec);display:inline-block}
+</style>
+
+<header class="top">
+  <div class="brand">
+    <h1>Motor <b>Test</b> Hücresi</h1>
+    <div class="spec" id="labSpec">—</div>
+  </div>
+  <nav class="viewnav" id="viewNav" aria-label="Bölümler">
+    <button data-v="garage">Garaj</button>
+    <button data-v="lab">Laboratuvar</button>
+  </nav>
+  <div class="status">
+    <span class="pill" id="pEng">—</span>
+    <span class="pill" id="pState">KAPALI</span>
+    <span class="pill" id="pCL">AÇIK DÖNGÜ</span>
+    <span class="pill" id="pMIL">MOTOR ARIZA</span>
+    <span class="pill" id="pRev">DEVİR LİMİTİ</span>
+  </div>
+</header>
+
+<section class="view" id="v-garage" hidden>
+  <div class="garage-hd"><h2>Garaj</h2><p>Altı motor, her biri kendi aracına bağlı. Eğriler bu modelin dinamometresinde ölçüldü. Seçtiğiniz motor laboratuvarda ve sürüşte kullanılır.</p></div>
+  <div class="ggrid" id="garageGrid"></div>
+</section>
+
+<div class="view" id="v-lab" hidden>
+
+<main class="app" style="margin-top:0">
+  <section class="card">
+    <div class="hd">
+      <h2>Kesit görünüm · <span id="hCyl">Silindir 1</span></h2>
+      <div class="row">
+        <div class="seg" id="segCyl"></div>
+        <label class="toggle"><input type="checkbox" id="chkStrobe"> Stroboskop</label>
+      </div>
+    </div>
+    <canvas id="cvEngine"></canvas>
+    <canvas id="cvStrip" title="Silindir seçmek için tıkla"></canvas>
+  </section>
+
+  <section class="card">
+    <div class="hd"><h2>Gösterge paneli</h2><span class="hint" id="hintTop">Kontak <span class="kbd">I</span> · Marş basılı tut <span class="kbd">S</span> · Gaz <span class="kbd">W</span></span></div>
+    <canvas id="cvGauge"></canvas>
+    <div class="controls">
+      <div class="ctl">
+        <span class="lab">Kontak ve marş</span>
+        <div class="row">
+          <button class="btn key bKey">Kontak <span class="kbd">I</span></button>
+          <button class="btn start bStart">Marş (basılı tut) <span class="kbd">S</span></button>
+        </div>
+      </div>
+      <div class="ctl">
+        <span class="lab">Gaz pedalı</span>
+        <div class="pedal"><input type="range" id="rPedal" min="0" max="100" value="0" step="1"><output id="oPedal">0 %</output></div>
+        <span class="hint"><span class="kbd">W</span> / <span class="kbd">↑</span> basılı = tam gaz, bırakınca sürgü değerine döner</span>
+      </div>
+      <div class="ctl">
+        <span class="lab">Yük</span>
+        <div class="seg" id="segLoad"><button class="act" data-v="free">Boşta</button><button data-v="dyno">Dinamometre</button><button data-v="car">Araç</button></div>
+      </div>
+      <div class="ctl">
+        <span class="lab">Zaman ölçeği <span class="kbd">T</span></span>
+        <div class="seg" id="segTime"><button class="act" data-v="1">1×</button><button data-v="0.25">¼×</button><button data-v="0.05">1/20×</button><button data-v="0.01">1/100×</button></div>
+      </div>
+      <div class="ctl" id="ctlDyno" hidden>
+        <span class="lab">Dinamometre freni</span>
+        <div class="seg" id="segDyno"><button class="act" data-v="speed">Devir tut</button><button data-v="torque">Sabit tork</button></div>
+        <div class="pedal"><input type="range" id="rDyno" min="1000" max="7000" step="50" value="3000"><output id="oDyno">3000 d/d</output></div>
+        <button class="btn small" id="bSweep">Tam gaz çekiş</button>
+      </div>
+      <div class="ctl" id="ctlCar" hidden>
+        <span class="lab">Vites · debriyaj · fren</span>
+        <div class="seg" id="segGear"><button class="act" data-v="0">N</button><button data-v="1">1</button><button data-v="2">2</button><button data-v="3">3</button><button data-v="4">4</button><button data-v="5">5</button></div>
+        <div class="pedal"><span class="hint" style="min-width:64px">Debriyaj</span><input type="range" id="rClutch" min="0" max="100" value="0"><output id="oClutch">0 %</output></div>
+        <span class="hint"><span class="kbd">C</span> debriyaja bas · <span class="kbd">B</span> fren · <span class="kbd">0</span>–<span class="kbd">6</span> vites</span>
+      </div>
+      <div class="ctl">
+        <span class="lab">Ses</span>
+        <div class="row"><button class="btn small bSound">Ses: açık <span class="kbd">M</span></button><input type="range" id="rVol" min="0" max="100" value="60" style="max-width:140px" aria-label="Ses düzeyi"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="hd"><h2>Veri kaydı · <span id="hWin">8 s</span> pencere</h2><span class="hint">Yavaş zaman ölçeğinde tek tek ateşleme darbeleri görünür</span></div>
+    <div class="chips" id="chips"></div>
+    <canvas id="cvScope"></canvas>
+  </section>
+
+  <section class="card">
+    <div class="hd">
+      <h2>Silindir basıncı · <span id="hCyl2">Silindir 1</span></h2>
+      <div class="seg" id="segPV"><button class="act" data-v="pt">p–θ</button><button data-v="pv">log p – log V</button></div>
+    </div>
+    <canvas id="cvCyl"></canvas>
+    <div class="stats" id="cylStats"></div>
+  </section>
+
+  <section class="card wide">
+    <div class="hd"><h2>ECU · motor kontrol ünitesi</h2><span class="hint" id="ecuHint">Hız-yoğunluk yakıt hesabı, kapalı döngü λ, vuruntu kontrolü, rölanti PID</span></div>
+    <nav class="tabs" id="tabs">
+      <button data-t="live" class="act">Canlı veri</button>
+      <button data-t="ve">VE haritası</button>
+      <button data-t="ign">Ateşleme haritası</button>
+      <button data-t="set">Ayarlar</button>
+      <button data-t="dtc">Arıza kodları<span class="badge" id="dtcBadge" hidden>0</span></button>
+      <button data-t="fault">Arıza simülasyonu</button>
+      <button data-t="dyno">Dinamometre</button>
+      <button data-t="mod">Modüller</button>
+    </nav>
+    <div class="pane" id="t-live"><div class="live" id="liveGrid"></div></div>
+    <div class="pane" id="t-ve" hidden>
+      <div class="maptools">
+        <span class="row" id="veBtns"></span>
+        <button class="btn small" id="bVeReset">Fabrika haritası</button>
+        <label class="toggle" id="autoWrap"><input type="checkbox" id="chkAuto"> Oto-tune (λ düzeltmesini haritaya yaz)</label>
+        <span class="hint" id="veSel">Hücre seçin, sonra <span class="kbd">+</span>/<span class="kbd">−</span> veya düğmeler</span>
+      </div>
+      <div class="tblwrap"><table class="map" id="tblVe"></table></div>
+      <p class="note" id="veNote">Hacimsel verim (%) tablosu: satırlar emme manifoldu basıncı (kPa), sütunlar devir. ECU havayı bu tablodan tahmin eder, gerçek motor kendi VE'sine göre hava çeker. Fark λ hatası olarak görünür ve kapalı döngü bunu düzeltmeye çalışır. Beyaz çerçeve şu anki çalışma noktası.</p>
+    </div>
+    <div class="pane" id="t-ign" hidden>
+      <div class="maptools">
+        <button class="btn small" data-ig="-1">−1°</button><button class="btn small" data-ig="1">+1°</button>
+        <button class="btn small" data-ig="-3">−3°</button><button class="btn small" data-ig="3">+3°</button>
+        <button class="btn small" id="bIgReset">Fabrika haritası (MBT / vuruntu sınırı)</button>
+        <span class="hint" id="igSel"></span>
+      </div>
+      <div class="tblwrap"><table class="map" id="tblIg"></table></div>
+      <p class="note" id="ignNote">Ateşleme avansı (° ÜÖN öncesi). Fabrika haritası açılışta motor modelinden hesaplanır: her hücre için en iyi tork avansı (MBT) bulunur, 95 oktanda vuruntu sınırının altında tutulur. Avans eklerseniz önce tork artar, sonra vuruntu başlar ve basınç eğrisinde titreşim görürsünüz.</p>
+    </div>
+    <div class="pane" id="t-set" hidden><div class="form" id="setForm"></div></div>
+    <div class="pane" id="t-dtc" hidden>
+      <div class="row" style="margin-bottom:6px"><button class="btn small" id="bClearDtc">Kodları sil</button><span class="hint">Arıza giderilmeden silinen kod koşul sürerse geri gelir.</span></div>
+      <div id="dtcList"></div>
+    </div>
+    <div class="pane" id="t-fault" hidden>
+      <p class="note" style="margin-top:0">Bir arıza açın ve motorun, ECU'nun ve göstergelerin nasıl tepki verdiğini izleyin. Her biri gerçek bir atölye vakasına karşılık gelir.</p>
+      <div class="grid2" id="faultList"></div>
+    </div>
+    <div class="pane" id="t-dyno" hidden>
+      <div class="row" style="margin-bottom:8px"><button class="btn small" id="bSweep2">Tam gaz çekiş başlat</button><button class="btn small" id="bDynoClear">Çekişleri temizle</button><span class="hint" id="dynoInfo">Dinamometre modunda tam gazda düşük devirden devir limitine tarama yapar.</span></div>
+      <canvas id="cvDyno"></canvas>
+    </div>
+    <div class="pane" id="t-mod" hidden>
+      <p class="note" style="margin-top:0">Modüller motora takılabilen ek sistemlerdir. Her biri kodda <code>defineModule({...})</code> ile tanımlanır; yeni özellik eklemek için aynı kalıbı kullanabilirsiniz.</p>
+      <div class="grid2" id="modList"></div>
+    </div>
+  </section>
+</main>
+<footer class="foot">
+  <span>Krank açısı çözünürlüklü model: her silindirde Wiebe ısı salınımı, manifold dolum dinamiği, duvar filmi, sensör gecikmeleri.</span>
+  <span>Isınma süresi gerçeğe göre yaklaşık 7 kat hızlandırılmıştır.</span>
+</footer>
+
+</div>
+
+<script>
+/* js/core.js */
+'use strict';
+/* =====================================================================
+   core.js — ÇEKİRDEK FİZİK + ECU (DOM'suz)
+   Birimler: SI (Pa, m, kg, s), açılar derece.
+   Silindir yerel açısı φ: 0 = emme ÜÖN, 180 = AÖN (IVC olayı), 360 = ateşleme ÜÖN, 540 = EVO olayı.
+   Motor değiştirmek: applyEngine(ENGINES[k]) sonra createSim().
+   ===================================================================== */
+const D2R=Math.PI/180, R2D=180/Math.PI;
+const clamp=(v,a,b)=>v<a?a:v>b?b:v, lerp=(a,b,t)=>a+(b-a)*t;
+const mod=(a,n)=>((a%n)+n)%n;
+const P_AMB=101325, R_AIR=287, T_AMB=298;
+const TR_RES=0.5, TR_N=721;              // kapalı çevrim izi: φ=180..540, 0.5° adım
+const IVO=712, IVC_L=228, EVO=492, EVC=728; // supap zamanlaması (görsel + kam)
+const HIST=10;
+
+/* ---------- Motor kataloğu ----------
+   firing: ateşleme sırası (silindir numaraları), eşit aralıklı.
+   veh: bağlı araç. spec: fabrika dinamometre ölçümü (bu modelde ölçülmüş değerler). */
+const ENGINES=[
+  {id:'i3t',name:'1.0 Üç Silindir Turbo',short:'1.0 T3',tag:'Şehir',layout:'Sıralı 3',fuel:'benzin',bore:74.5,stroke:76.4,rod:140,cr:10.5,firing:[1,2,3],
+   J:0.11,redline:6300,idle:850,vePk:3000,veMax:0.97,fric:1.0,turbo:{boost:1.2,lag:0.45,spool:0.55},
+   snd:{res:115,lp:0.95,odd:0.25},sweep:[1500,300],price:0,
+   veh:{name:'Kompakt hatchback',kind:'hatch',mass:1120,gears:[3.77,2.09,1.47,1.10,0.87,0.73],final:4.27,rw:0.30,cda:0.64,clutch:300,color:'#3d8fd0'},
+   blurb:'Küçük hacim, erken devreden turbo. Düşük devirde dolgun, şehirde ekonomik. Üç silindirin kendine has titrek sesi.'},
+  {id:'i4',name:'1.6 Dört Silindir',short:'1.6 R4',tag:'Klasik',layout:'Sıralı 4',fuel:'benzin',bore:79,stroke:81.5,rod:129,cr:10.5,firing:[1,3,4,2],
+   J:0.16,redline:6800,idle:850,vePk:4800,veMax:0.97,fric:1.0,turbo:null,
+   snd:{res:160,lp:1.0},sweep:[1500,350],price:0,
+   veh:{name:'Aile sedanı',kind:'sedan',mass:1250,gears:[3.45,1.94,1.29,0.97,0.78],final:4.06,rw:0.30,cda:0.66,clutch:280,color:'#b9c2c9'},
+   blurb:'Atmosferik, 16 supaplı, doğrusal güç. Ayar yapmayı öğrenmek için en dürüst motor.'},
+  {id:'d4',name:'2.0 Dizel Turbo',short:'2.0 TDi',tag:'Tork',layout:'Sıralı 4 · dizel',fuel:'dizel',bore:81,stroke:95.5,rod:144,cr:16.5,firing:[1,3,4,2],
+   J:0.24,redline:4800,idle:800,vePk:2600,veMax:0.94,fric:1.25,turbo:{boost:1.45,lag:0.6,spool:0.4},qMax:58,
+   snd:{res:95,lp:0.75,clatter:1},sweep:[1100,250],price:0,
+   veh:{name:'SUV',kind:'suv',mass:1640,gears:[3.77,2.05,1.29,0.92,0.72,0.60],final:3.65,rw:0.345,cda:0.92,clutch:480,color:'#5f7a5a'},
+   blurb:'Sıkıştırmayla ateşlenir: buji yok, gaz kelebeği yok, pedal yakıt miktarını belirler. Soğukta kızdırma bujilerini bekleyin.'},
+  {id:'i6',name:'3.0 Sıralı Altı Biturbo',short:'3.0 R6',tag:'Sport',layout:'Sıralı 6',fuel:'benzin',bore:84,stroke:89.6,rod:144,cr:10.2,firing:[1,5,3,6,2,4],
+   J:0.24,redline:7000,idle:750,vePk:4500,veMax:0.98,fric:0.95,turbo:{boost:1.05,lag:0.55,spool:0.5},
+   snd:{res:140,lp:1.15},sweep:[1500,350],price:0,
+   veh:{name:'Sport sedan',kind:'sport',mass:1650,gears:[4.11,2.32,1.54,1.18,1.0,0.85],final:3.15,rw:0.33,cda:0.62,clutch:650,color:'#1d3557'},
+   blurb:'Doğal dengeli sıralı altı: titreşimsiz, pürüzsüz. İki küçük turbo geniş bir tork platosu verir.'},
+  {id:'v8',name:'5.0 V8 Atmosferik',short:'5.0 V8',tag:'Kas',layout:'V8 · 90°',fuel:'benzin',bore:92.2,stroke:92.7,rod:150,cr:11.0,firing:[1,5,4,8,6,3,7,2],
+   J:0.34,redline:7000,idle:700,vePk:4900,veMax:1.05,fric:0.95,turbo:null,
+   snd:{res:85,lp:0.85,burble:1},sweep:[1500,350],price:0,
+   veh:{name:'Kas coupe',kind:'coupe',mass:1730,gears:[3.24,2.10,1.49,1.15,0.86,0.69],final:3.55,rw:0.345,cda:0.74,clutch:720,color:'#b3261e'},
+   blurb:'Çapraz düzlemli krank, 90° V. Her devirde dört ateşleme ve o tanıdık gürleme. Büyük hacim, ani tepki.'},
+  {id:'m4',name:'1.0 Motosiklet Dörtlüsü',short:'1.0 M4',tag:'Devir',layout:'Sıralı 4 · kısa strok',fuel:'benzin',bore:76,stroke:55.1,rod:105,cr:13.0,firing:[1,2,4,3],
+   J:0.045,redline:14000,idle:1300,vePk:11500,veMax:1.08,fric:0.6,turbo:null,octane:98,
+   snd:{res:260,lp:1.6},sweep:[3000,900],price:0,
+   veh:{name:'Süper spor motosiklet',kind:'bike',mass:280,gears:[2.6,2.05,1.72,1.5,1.36,1.26],final:4.2,rw:0.31,cda:0.34,clutch:220,color:'#f2c230'},
+   blurb:'Kısa strok, hafif krank, 14.000 d/d. Tork az, güç bol. Devir düşerse hiçbir şey olmaz, yukarıda hayat başlar.'},
+];
+
+const ENG={};
+let CYL_OFS=[0,540,180,360], NCYL=4;
+const TR_V=new Float64Array(TR_N);
+let LOAD_LIM=4000; // dyno/gösterge ölçekleri için
+function round50(x){return Math.round(x/50)*50;}
+function applyEngine(def){
+  for(const k of Object.keys(ENG)) delete ENG[k];
+  const n=def.firing.length, diesel=def.fuel==='dizel';
+  Object.assign(ENG,{def,id:def.id,diesel,n,bore:def.bore/1000,stroke:def.stroke/1000,rod:def.rod/1000,cr:def.cr,J:def.J,redline:def.redline,idle:def.idle,
+    afr:diesel?14.5:14.7,lhv:diesel?42.8e6:44e6,rhoF:diesel?0.835:0.745,fric:def.fric||1,s:7000/def.redline});
+  ENG.r=ENG.stroke/2; ENG.Ap=Math.PI*ENG.bore*ENG.bore/4; ENG.Vdc=ENG.Ap*ENG.stroke; ENG.Vd=n*ENG.Vdc; ENG.Vc=ENG.Vdc/(ENG.cr-1);
+  const sc=ENG.Vd/1.6e-3; ENG.sc=sc;
+  ENG.Vman=0.0032*sc; ENG.thrD=0.05*Math.sqrt(sc*(def.redline/6800)); ENG.Ath=Math.PI*ENG.thrD*ENG.thrD/4;
+  ENG.iacMax=4.0e-5*sc*(def.redline>9000?1.4:1); ENG.leak=1.5e-6*sc;
+  CYL_OFS=new Array(n); def.firing.forEach((c,k)=>CYL_OFS[c-1]=k*720/n); NCYL=n;
+  for(let k=0;k<TR_N;k++) TR_V[k]=cylVol(180+k*TR_RES);
+  ENG.tachMax=Math.ceil(def.redline/1000)+1;
+  ENG.boostMax=def.turbo?def.turbo.boost:0;
+  // ECU eksenleri
+  const R=round50(def.redline+700); ENG.rpmBins=[]; for(let i=0;i<16;i++) ENG.rpmBins.push(round50(500+(R-500)*Math.pow(i/15,1.15)));
+  if(diesel){ENG.loadBins=[0,10,20,30,40,50,60,70,80,90,100]; ENG.qBins=[0,5,10,15,20,25,30,40,50,60,70];}
+  else {const b=[20,30,40,50,60,70,80,90,100]; if(def.turbo){const mx=100+def.turbo.boost*100+25; for(let k=1;k<=4;k++) b.push(Math.round((100+(mx-100)*k/4)/5)*5);} ENG.loadBins=b;}
+  // enjektör boyutu (benzin): tam yükte redline'da ~%75 doluluk
+  if(!diesel){const mMax=1.0*(P_AMB+ENG.boostMax*1e5)*ENG.Vdc/(R_AIR*305)/(ENG.afr*0.85), cycT=120/def.redline;
+    ENG.injCc=Math.round(mMax/(0.75*cycT)/(ENG.rhoF*1e-3)*60/10)*10;}
+  else ENG.injCc=0;
+  // ısıl kütle
+  const pf=sc*(1+ENG.boostMax*0.9)*(diesel?0.75:def.redline/6800); ENG.pf=pf;
+  ENG.Ccool=4400*Math.pow(pf,0.8); ENG.kRad=650*Math.pow(pf,0.95);
+}
+function pistonX(phi){const a=phi*D2R,s=Math.sin(a),c=Math.cos(a),r=ENG.r,l=ENG.rod;return r*(1-c)+l-Math.sqrt(l*l-r*r*s*s);}
+function pistonDX(phi){const a=phi*D2R,s=Math.sin(a),c=Math.cos(a),r=ENG.r,l=ENG.rod;return r*s*(1+r*c/Math.sqrt(l*l-r*r*s*s));} // m/rad
+function cylVol(phi){return ENG.Vc+ENG.Ap*pistonX(phi);}
+
+/* Gerçek motorun hacimsel verimi (ECU bunu bilmez, kendi tablosunu kullanır) */
+function veTrue(rpm,map){
+  const d=ENG.def, s=ENG.s, n=Math.max(rpm,100)/1000*s, pk=d.vePk/1000*s;
+  let v=d.veMax-0.019*(n-pk)*(n-pk)+0.025*Math.sin(n*1.45+0.6);
+  const k=map/1e5; v*=0.70+0.30*Math.min(k,1)+(k>1?0.06*Math.min(k-1,1):0);
+  return clamp(v,0.15,1.15);
+}
+/* Akış: sıkıştırılabilir orifis (kg/s), yön p1→p2 */
+function orifice(A,p1,p2,T){
+  if(A<=0) return 0; let s=1; if(p2>p1){const t=p1;p1=p2;p2=t;s=-1;}
+  const g=1.4, pr=Math.max(p2/p1,0), crit=0.5283; let psi;
+  if(pr<=crit) psi=Math.sqrt(g)*Math.pow(2/(g+1),(g+1)/(2*(g-1)));
+  else psi=Math.sqrt(2*g/(g-1)*(Math.pow(pr,2/g)-Math.pow(pr,(g+1)/g)));
+  return s*0.82*A*p1/Math.sqrt(R_AIR*T)*psi;
+}
+function knockLimit(rpm,octane,ect,iat){
+  const of=octane>=98?1.07:octane>=95?1:0.9;
+  return (6.0e6+0.35e6*rpm*ENG.s/1000)*of*(1-0.004*(ect-90))*(1-0.004*(iat-303))*Math.pow(0.079/ENG.bore,0.4);
+}
+function burnParams(rpm,lam,kpa,ect){
+  const n=rpm*ENG.s/1000;
+  const dur=(34+2.6*n)*(1+2.4*(lam-0.92)*(lam-0.92))*(1+0.45*clamp(1-kpa/100,0,1))*(1+0.25*clamp((60-ect)/60,0,1));
+  const delay=(5+0.9*n)*(1+1.2*clamp(lam-1,0,1));
+  return [delay,dur];
+}
+function dieselBurn(rpm,q,ect,glowOK,cranking){
+  const delayMs=0.55+1.4*clamp((40-ect)/60,0,1)+(cranking&&!glowOK?1.1:0);
+  return [6*rpm*delayMs/1000, 38+0.45*q+1.8*rpm/1000];
+}
+function combEff(lam){return ENG.diesel?0.98:(lam<1?0.97:0.97-0.6*Math.max(0,lam-1.15)*Math.max(0,lam-1.15));}
+function heatFrac(rpm,ect){return 0.79+0.04*Math.min(rpm*ENG.s/6000,1.2)-0.06*clamp((70-ect)/50,0,1);}
+
+/* Tek çevrim basınç izi: tek bölgeli ısı salınımı + politropik sıkıştırma/genişleme */
+function cycleTrace(o,out){
+  const fire=o.fire;
+  const Q=fire?Math.min(o.mFuel,o.mAir/ENG.afr)*ENG.lhv*combEff(o.lam)*heatFrac(o.rpm,o.ect):0;
+  let start,dur;
+  if(o.start!=null){start=o.start+(o.covS||0);dur=o.dur*(1+(o.covD||0));}
+  else {const bp=burnParams(o.rpm,o.lam,o.kpa,o.ect); dur=bp[1]*(1+(o.covD||0)); start=360-o.adv+bp[0]+(o.covS||0);}
+  const wm=o.wm||3;
+  let p=o.pBDC, xb0=0, pmax=p, thP=-180, W=0, mfb50=NaN;
+  out[0]=p;
+  for(let k=1;k<TR_N;k++){
+    const phi=180+k*TR_RES, V0=TR_V[k-1], V1=TR_V[k];
+    let xb1=0; if(Q>0&&phi>start){const z=(phi-start)/dur; xb1=1-Math.exp(-5*Math.pow(z,wm));}
+    const g=1.33-0.07*xb0;
+    const pn=p*Math.pow(V0/V1,g)+(g-1)*Q*(xb1-xb0)/V1;
+    W+=0.5*(p+pn)*(V1-V0); p=pn; out[k]=p;
+    if(p>pmax){pmax=p;thP=phi-360;}
+    if(mfb50!==mfb50&&xb1>=0.5) mfb50=phi-360;
+    xb0=xb1;
+  }
+  return {Q,start,dur,pmax,thP,W,mfb50,pEVO:p};
+}
+
+/* ---------- ECU tabloları (eksenleri kendi içinde) ---------- */
+function mkTable(x,y,fill){return {x,y,d:new Float32Array(x.length*y.length).fill(fill||0)};}
+function binPos(b,v){const n=b.length;if(v<=b[0])return[0,0];if(v>=b[n-1])return[n-2,1];let i=0;while(v>b[i+1])i++;return[i,(v-b[i])/(b[i+1]-b[i])];}
+function interp2(T,xv,yv){
+  const NR=T.x.length,[i,fx]=binPos(T.x,xv),[j,fy]=binPos(T.y,yv), d=T.d;
+  const a=d[j*NR+i],b=d[j*NR+i+1],c=d[(j+1)*NR+i],e=d[(j+1)*NR+i+1];
+  const lo=a+(b-a)*fx, hi=c+(e-c)*fx; return lo+(hi-lo)*fy;
+}
+function cellWeights(T,xv,yv){const NR=T.x.length,[i,fx]=binPos(T.x,xv),[j,fy]=binPos(T.y,yv);
+  return [[j*NR+i,(1-fx)*(1-fy)],[j*NR+i+1,fx*(1-fy)],[(j+1)*NR+i,(1-fx)*fy],[(j+1)*NR+i+1,fx*fy]];}
+function qMaxCurve(rpm){const d=ENG.def; const a=clamp((rpm-700)/900,0.42,1), b=rpm>2900?1-(rpm-2900)/3800:1; return d.qMax*a*clamp(b,0.3,1);}
+function factoryVE(){
+  if(ENG.diesel){const T=mkTable(ENG.rpmBins,ENG.loadBins); // pedal → yakıt miktarı (mg/strok)
+    for(let j=0;j<T.y.length;j++)for(let i=0;i<T.x.length;i++){const p=T.y[j]/100; T.d[j*T.x.length+i]=Math.round(qMaxCurve(T.x[i])*Math.pow(p,1.25)*10)/10;}
+    return T;}
+  const T=mkTable(ENG.rpmBins,ENG.loadBins);
+  for(let j=0;j<T.y.length;j++)for(let i=0;i<T.x.length;i++){const err=0.045*Math.sin(i*1.31+j*0.77)+0.025*Math.cos(i*0.53-j*1.9);
+    T.d[j*T.x.length+i]=Math.round(veTrue(T.x[i],T.y[j]*1000)*(1+err)*1000)/10;}
+  return T;
+}
+const _scratch=new Float64Array(TR_N);
+function factoryIgn(){
+  const ys=ENG.diesel?ENG.qBins:ENG.loadBins, T=mkTable(ENG.rpmBins,ys), NR=T.x.length;
+  for(let j=0;j<ys.length;j++)for(let i=0;i<NR;i++){
+    const rpm=T.x[i];
+    if(ENG.diesel){
+      const q=ys[j], bst=ENG.boostMax*clamp(q/40,0,1)*clamp((rpm-900)/900,0,1), map=P_AMB+bst*1e5;
+      const mAir=veTrue(rpm,map)*map*ENG.Vdc/(R_AIR*318), mFuel=q*1e-6, lam=mFuel>0?mAir/(mFuel*ENG.afr):9;
+      const [dl,du]=dieselBurn(rpm,q,90,true,false);
+      let best=-1e9,soi=4;
+      for(let a=0;a<=30;a+=1){const r=cycleTrace({pBDC:map,mAir,mFuel,lam,rpm,start:360-a+dl,dur:du,wm:2,ect:90,fire:q>0},_scratch);
+        if(r.pmax<185e5&&r.W>best){best=r.W;soi=a;}}
+      T.d[j*NR+i]=q<=0?2:soi; continue;
+    }
+    const kpa=ys[j], map=kpa*1000;
+    const lam=kpa>=90?0.88:1, ve=veTrue(rpm,map), mAir=ve*map*ENG.Vdc/(R_AIR*303), mFuel=mAir/(ENG.afr*lam);
+    const pk=knockLimit(rpm,ENG.def.octane||95,90,303)*0.93;
+    let best=-1e9,mbt=10,safe=0;
+    for(let a=0;a<=46;a+=1){const r=cycleTrace({pBDC:map*(1-0.07*(rpm*ENG.s/7000)**2),mAir,mFuel,lam,adv:a,rpm,kpa,ect:90,fire:true},_scratch);
+      if(r.W>best){best=r.W;mbt=a;} if(r.pmax<pk) safe=a;}
+    let adv=Math.min(mbt,safe);
+    if(rpm<=ENG.idle*1.45&&kpa<=50) adv=Math.min(adv,rpm<ENG.idle*0.85?10:14);  // rölantide tork rezervi
+    if(rpm<=500) adv=Math.min(adv,8);
+    T.d[j*NR+i]=Math.round(adv*2)/2;
+  }
+  return T;
+}
+
+/* ---------- Arızalar ve DTC ---------- */
+const FAULTS=[
+  {id:'plug',  name:'Buji / kızdırma bujisi arızası · silindir 3', desc:'Benzinlide 3. silindirde kıvılcım yok: rölanti titrer, P0303. Dizelde kızdırma bujisi ölü: soğuk çalıştırmada 3. silindir yanmaz.'},
+  {id:'inj',   name:'Tıkalı enjektör · silindir 2', desc:'2. enjektör %55 debi verir. Silindir fakir yanar, yüksek yükte tekler.'},
+  {id:'vac',   name:'Vakum kaçağı', desc:'Emme portlarından ölçülmeyen hava girer. Rölantide fakir karışım, yakıt düzeltmesi artı yönde büyür. (Dizelde etkisiz.)'},
+  {id:'o2',    name:'O2 sensörü ölü', desc:'Sensör sabit sinyal verir. ECU kapalı döngüden çıkar, P0134.'},
+  {id:'map',   name:'MAP sensörü sapması (+15 kPa)', desc:'ECU olduğundan fazla hava sanar, karışım zenginleşir. Dizelde duman sınırı gevşer.'},
+  {id:'batt',  name:'Zayıf akü', desc:'Marşta voltaj 8 V civarına düşer, motor yavaş döner, zor çalışır.'},
+  {id:'pump',  name:'Yakıt pompası zayıf', desc:'Rampa basıncı düşük. Enjektörler az yakıt verir, yükte güç kaybı, P0087.'},
+  {id:'fan',   name:'Radyatör fanı çalışmıyor', desc:'Yavaş trafikte ya da dinamometrede motor ısınır, 113 °C üstünde ECU koruma moduna geçer.'},
+  {id:'thermo',name:'Termostat açık kalmış', desc:'Motor çalışma sıcaklığına ulaşamaz. Soğuk zenginleştirme sürer, P0128.'},
+];
+const DTC_DEF={P0300:'Rastgele/çoklu silindir teklemesi',P0171:'Sistem çok fakir (Bank 1)',P0172:'Sistem çok zengin (Bank 1)',P0134:'O2 sensörü tepki vermiyor (B1S1)',
+  P0217:'Motor aşırı ısınma',P0128:'Termostat: soğutma suyu sıcaklığı düşük',P0087:'Yakıt rampası basıncı çok düşük',P0106:'MAP sensörü aralık/performans hatası',P0380:'Kızdırma bujisi devresi'};
+for(let i=1;i<=8;i++) DTC_DEF['P030'+i]=`Silindir ${i} tekleme`;
+
+/* ---------- Modül sistemi (genişletme noktası) ----------
+   defineModule({id,name,desc,params:[{k,label,min,max,step,unit,v}],
+     init(S,M), preStep(S,dt,M), ecu(S,dt,M), onCycle(S,i,o,M), status(S,M)})  */
+const MODULES=[];
+function defineModule(m){m.on=!!m.on;m.p={};(m.params||[]).forEach(q=>m.p[q.k]=q.v);m.st={};MODULES.push(m);return m;}
+function modOn(id){const m=MODULES.find(x=>x.id===id);return m&&m.on?m:null;}
+
+defineModule({id:'turbo',name:'Turbo şarj',desc:'Egzoz akışıyla dönen turbo, ara soğutucu ve wastegate. Gecikme (lag), blow-off sesi. Turbolu motorlarda fabrikadan takılı gelir; atmosferik motora sonradan takarsanız büyük enjektör seçin.',
+  params:[{k:'boost',label:'Wastegate basıncı',min:0.3,max:2.0,step:0.05,unit:'bar',v:0.8},{k:'lag',label:'Gecikme sabiti',min:0.2,max:2,step:0.05,unit:'s',v:0.8}],
+  init(S,M){M.st.spd=0;M.st.bov=false;},
+  preStep(S,dt,M){const t=M.st; t.spd=t.spd||0;
+    const sp=ENG.def.turbo?ENG.def.turbo.spool:0.6, m0=0.010*ENG.sc*sp, m1=0.045*ENG.sc*sp;
+    let eq=clamp((S.mdotCyl-m0)/m1,0,1.35);
+    let tgt=M.p.boost; if(ENG.diesel) tgt*=clamp(0.15+S.tps*1.1,0,1);
+    eq=Math.min(eq,Math.sqrt(tgt/1.6)*1.02);
+    t.spd+=(eq-t.spd)*dt/(eq>t.spd?M.p.lag:1.6);
+    let b=1.6*t.spd*t.spd*1e5;
+    if(!ENG.diesel){
+      if(S.tps<0.08&&b>25000&&S.map<P_AMB+b-25000){if(!t.bov){t.bov=true;S.events.push({t:S.t,type:'bov',amp:b/1.2e5});}}
+      if(S.tps>0.2) t.bov=false;
+      if(t.bov) b*=0.12;}
+    S.boostTgt=b; S.turboSpd=t.spd;},
+  status(S,M){return `Turbo devri ${(M.st.spd*190|0)} bin d/d · basınç ${(S.boost/1e5).toFixed(2)} bar`;}});
+
+defineModule({id:'launch',name:'Kalkış kontrolü',desc:'Araç modunda, araç dururken debriyaja basılı ve gaz > %60 iken devri sabitler. Kıvılcım kesilir, yanmamış yakıt egzozda patlar. (Benzinli)',
+  params:[{k:'rpm',label:'Kalkış devri',min:2000,max:9000,step:100,v:4000},{k:'retard',label:'Gecikme',min:0,max:20,step:1,unit:'°',v:12}],
+  ecu(S,dt,M){const v=S.veh; const act=!ENG.diesel&&S.load==='car'&&v.v<0.6&&v.clutch>0.6&&S.tps>0.6;
+    M.st.act=act; S.ecu.launch=act; if(act){S.ecu.modSpark-=M.p.retard; S.ecu.launchCut=S.rpm>M.p.rpm;} else S.ecu.launchCut=false;},
+  status(S,M){return M.st.act?'Etkin, devir sabitleniyor':'Bekliyor';}});
+
+defineModule({id:'nitro',name:'Nitro (N₂O, ıslak kit)',desc:'X tuşu (ya da sürüşte NOS düğmesi) basılıyken, gaz > %85 iken silindire ek oksijen ve yakıt verir. ECU avansı geri çeker. Tüp biter.',
+  params:[{k:'shot',label:'Ek güç oranı',min:0.1,max:0.6,step:0.05,unit:'',v:0.35},{k:'retard',label:'Avans geri çekme',min:0,max:12,step:1,unit:'°',v:6}],
+  init(S,M){M.st.bottle=1;},
+  ecu(S,dt,M){M.st.act=S.nitroBtn&&S.tps>0.85&&S.rpm>ENG.redline*0.35&&M.st.bottle>0; if(M.st.act){S.ecu.modSpark-=M.p.retard; M.st.bottle=Math.max(0,M.st.bottle-dt*M.p.shot/0.35/25);}},
+  onCycle(S,i,o,M){if(M.st.act){o.mAir*=1+M.p.shot;o.mFuel*=1+M.p.shot;}},
+  status(S,M){return `Tüp %${Math.round((M.st.bottle??1)*100)}${M.st.act?' · PÜSKÜRTÜYOR':''}`;}});
+
+/* Fabrika dinamometre ölçümleri (bu modelle, stok ayarda ölçüldü; ayar değişince yeniden ölçün) */
+const FACTORY_DYNO={"i3t":{"tq":[168,1750],"pw":[111,5850],"curve":[[1650,166],[1850,165],[2200,160],[2400,159],[2700,155],[2950,154],[3200,154],[3450,154],[3700,153],[3950,155],[4200,154],[4450,154],[4750,153],[5000,149],[5250,145],[5500,140],[5750,135],[6000,126],[6150,121]]},"i4":{"tq":[140,4550],"pw":[106,6050],"curve":[[1650,114],[1950,119],[2250,122],[2550,124],[2850,127],[3150,130],[3450,133],[3750,135],[4050,137],[4350,139],[4650,140],[4950,139],[5250,136],[5550,132],[5850,127],[6150,121],[6450,115],[6700,109]]},"d4":{"tq":[321,1750],"pw":[132,3150],"curve":[[1200,162],[1500,234],[1700,312],[1850,318],[2050,314],[2300,312],[2450,312],[2750,311],[2950,306],[3150,293],[3350,272],[3550,251],[3800,230],[4000,208],[4200,187],[4450,165],[4650,143],[4700,128]]},"i6":{"tq":[450,4750],"pw":[376,6900],"curve":[[1650,416],[1950,426],[2250,432],[2550,427],[2850,426],[3150,421],[3450,423],[3750,430],[4050,436],[4350,441],[4650,446],[4950,443],[5250,438],[5550,437],[5850,433],[6150,415],[6450,400],[6750,389],[6900,383]]},"v8":{"tq":[458,4700],"pw":[361,6400],"curve":[[1650,393],[1950,403],[2250,411],[2550,417],[2850,423],[3150,431],[3450,439],[3750,447],[4050,451],[4350,454],[4650,457],[4950,456],[5250,451],[5550,440],[5850,427],[6150,410],[6450,392],[6750,373],[6900,363]]},"m4":{"tq":[102,10000],"pw":[178,13700],"curve":[[3150,81],[3800,81],[4450,84],[5100,86],[5750,89],[6400,92],[7050,95],[7700,98],[8350,99],[8950,101],[9600,102],[10250,102],[10900,102],[11550,101],[12200,99],[12800,96],[13450,93],[13700,91]]}};
+ENGINES.forEach(e=>{const f=FACTORY_DYNO[e.id]; if(f){e.spec={tq:f.tq,pw:f.pw}; e.curve=f.curve;}});
+
+function configureModulesForEngine(){
+  const t=MODULES.find(m=>m.id==='turbo'), d=ENG.def.turbo;
+  t.on=!!d; if(d){t.p.boost=d.boost;t.p.lag=d.lag;}
+  MODULES.forEach(m=>{m.st={};});
+}
+
+/* ---------- Simülasyon durumu ---------- */
+function createSim(){
+  const n=NCYL, cyl=[];
+  for(let i=0;i<n;i++){const tr=new Float64Array(TR_N); tr.fill(P_AMB);
+    cyl.push({tr,hist:Array.from({length:HIST},()=>new Float32Array(TR_N)),hInfo:new Array(HIST).fill(null),hi:0,phiPrev:mod(-CYL_OFS[i],720),film:0,p:P_AMB,leak:1,
+      info:{fired:false,lam:1,adv:10,start:360,dur:50,pmax:P_AMB,thP:0,W:0,mfb50:NaN,knock:0,mis:false,pEVO:P_AMB,mInj:0,egt:300}});}
+  const def=ENG.def;
+  const S={t:0,theta:0,omega:0,rpm:0,key:false,startBtn:false,nitroBtn:false,pedal:0,pedalOverride:null,tps:0,
+    map:P_AMB,boost:0,boostTgt:0,turboSpd:0,Tman:303,Tup:T_AMB,pexh:P_AMB,mdotCyl:0,mdotTh:0,leakFlow:0,
+    batt:12.6,ecuOn:false,primeT:0,pumpOn:false,fuelP:ENG.diesel?300e5:2.5e5,ect:20,oilT:20,fan:false,
+    lamExh:1,lamSens:1,lamQ:[],Tg:0,TgF:0,Tf:0,Tbrake:0,fuelAcc:0,fuelAccT:0,fuelFlow:0,fuelUsed:0,egt:300,runT:0,
+    cyl,events:[],faults:{},load:'free',
+    dyno:{ctl:'speed',target:3000,torque:60,I:0,T:0,Tf:0,sweep:null,runs:[]},
+    veh:{gear:0,clutch:0,clutchCmd:0,brake:0,v:0,Tc:0,grade:0,odo:0,def:def.veh},
+    ecu:null,
+  };
+  S.ecu={ve:factoryVE(),ign:factoryIgn(),
+    set:{revLimit:def.redline,idleTarget:def.idle,lamWOT:0.87,closedLoop:true,knockCtl:true,dfco:true,transComp:true,advOffset:0,injCc:ENG.injCc,octane:def.octane||95,autotune:false,smokeLam:1.18},
+    stft:0,ltft:0,iac:0.25,iacI:0,idleSpark:0,idleTgt:def.idle,lamT:1,warmEnr:1,crankEnr:1,cranking:false,revCut:false,dfco:false,cl:false,o2t:0,o2fault:false,
+    pw:0,duty:0,adv:0,q:0,qI:0,qIdle:0,glowT:0,kr:new Array(n).fill(0),film:new Array(n).fill(0),modSpark:0,launch:false,launchCut:false,limp:false,
+    dtc:new Set(),dtcFresh:0,misC:new Array(n).fill(0),cycC:new Array(n).fill(0),timers:{},knockCount:0};
+  MODULES.forEach(m=>m.on&&m.init&&m.init(S,m));
+  return S;
+}
+function injFlow(cc){return cc/60*ENG.rhoF*1e-3;}   // kg/s
+function deadTime(V){return 0.35+0.6*Math.pow(14/Math.max(V,6),1.5);} // ms
+function crossed(a,b,x){return a<=b?(a<x&&b>=x):(x>a||x<=b);}
+
+/* ---------- ECU ---------- */
+function ecuStep(S,dt){
+  const e=S.ecu, st=e.set, F=S.faults, rpm=S.rpm;
+  S.mapSens=S.map+(F.map?15000:0); S.ectSens=S.ect; S.iatSens=S.Tman;
+  e.modSpark=0;
+  if(!S.ecuOn){e.cl=false;e.o2t=0;e.stft=0;e.cranking=false;e.revCut=false;e.dfco=false;e.iac=0.25;e.idleSpark=0;e.pw=0;e.duty=0;e.q=0;e.glowT=0;e.glowDone=false;return;}
+  e.cranking=rpm<400&&S.startBtn;
+  e.limp=S.ect>110||(e.limp&&S.ect>100);
+  const lim=e.limp?Math.min(3500,st.revLimit):st.revLimit;
+  const tgt=st.idleTarget+(ENG.diesel?150:350)*clamp((60-S.ectSens)/60,0,1); e.idleTgt=tgt;
+  if(ENG.diesel){
+    // kızdırma bujileri
+    if(e.glowT>0){e.glowT-=dt; if(e.glowT<=0) e.glowDone=true;}
+    // rölanti regülatörü (yakıt miktarı)
+    const err=tgt-rpm;
+    if(rpm>200){e.qI=clamp(e.qI+0.0035*err*dt,-4,10);}
+    e.qIdle=rpm<120?0:clamp(4.0+e.qI+0.010*err,0,18);
+    e.revCut=rpm>lim+120;
+    e.cl=false; e.dfco=S.tps<0.01&&e.qIdle<=0.05&&rpm>tgt+300;
+    T_dtc(S,dt,lim); MODULES.forEach(m=>m.on&&m.ecu&&m.ecu(S,dt,m)); return;
+  }
+  const kpa=S.mapSens/1000;
+  let lt=1; if(S.tps>0.55&&kpa>80) lt=st.lamWOT-(kpa>105?0.0006*(kpa-100):0);
+  if(S.ectSens<40) lt=Math.min(lt,0.95);
+  e.lamT+=(lt-e.lamT)*Math.min(1,dt/0.15);
+  e.warmEnr=1+0.08*clamp((50-S.ectSens)/50,0,1);
+  e.crankEnr=1.0+0.35*clamp((70-S.ectSens)/50,0,1);
+  if(rpm>lim) e.revCut=true; else if(rpm<lim-150*(ENG.redline/7000)) e.revCut=false;
+  const dfOn=tgt+850*(ENG.redline/7000), dfOff=tgt+450*(ENG.redline/7000);
+  if(st.dfco&&S.tps<0.01&&rpm>dfOn&&S.ectSens>50&&!e.cranking) e.dfco=true; else if(S.tps>=0.01||rpm<dfOff) e.dfco=false;
+  // rölanti kontrolü (IAC PI + avans)
+  const inGear=S.load==='car'&&S.veh.gear>0&&S.veh.clutch<0.5;
+  const ff=0.20+0.10*clamp((70-S.ectSens)/60,0,1)+(inGear?0.04:0);
+  const rs=7000/ENG.redline;
+  if(rpm<250){e.iac=ff+0.08;e.idleSpark=0;e.iacI*=0.98;}
+  else if(S.tps<0.02&&!e.dfco){const err=tgt-rpm;
+    if(rpm<tgt+700/rs){e.iacI=clamp(e.iacI+0.00010*rs*err*dt,-0.2,0.5);e.idleSpark=clamp(err*0.02*rs,-5,8);} else e.idleSpark=0;
+    e.iac=clamp(ff+e.iacI+0.00025*rs*err,0.02,1);}
+  else {e.idleSpark=0;e.iac=clamp(ff+e.iacI+0.06,0,1);}
+  // lambda kapalı döngü
+  e.o2t+=dt;
+  if(F.o2&&e.o2t>12&&S.ectSens>40&&rpm>500){const T=e.timers;T.o2=(T.o2||0)+dt;if(T.o2>15){e.o2fault=true;setDTC(S,'P0134');}}
+  e.cl=st.closedLoop&&!e.o2fault&&e.o2t>12&&S.ectSens>40&&!e.dfco&&!e.revCut&&rpm>500&&e.lamT>0.985&&!e.cranking&&!e.launchCut;
+  if(e.cl){const err=clamp(S.lamSens-e.lamT,-0.3,0.3); e.stft=clamp(e.stft+0.9*err*dt,-0.25,0.25);
+    if(st.autotune){const w=cellWeights(e.ve,rpm,kpa); const g=0.6*e.stft*dt; for(const [c,wt] of w) e.ve.d[c]=clamp(e.ve.d[c]*(1+g*wt),5,130); e.stft-=g*0.9;}
+    else {const d=e.stft*0.06*dt; e.ltft=clamp(e.ltft+d,-0.25,0.25); e.stft-=d;}
+  } else e.stft*=Math.max(0,1-dt*0.8);
+  for(let i=0;i<NCYL;i++) e.kr[i]=Math.max(0,e.kr[i]-0.8*dt);
+  const T=e.timers, tot=e.stft+e.ltft;
+  T.lean=(e.cl&&tot>0.2)?(T.lean||0)+dt:0; if(T.lean>5) setDTC(S,'P0171');
+  T.rich=(e.cl&&tot<-0.2)?(T.rich||0)+dt:0; if(T.rich>5) setDTC(S,'P0172');
+  T_dtc(S,dt,lim);
+  MODULES.forEach(m=>m.on&&m.ecu&&m.ecu(S,dt,m));
+}
+function T_dtc(S,dt,lim){
+  const e=S.ecu,T=e.timers,rpm=S.rpm;
+  if(S.ect>113) setDTC(S,'P0217');
+  T.th=(rpm>500)?(T.th||0)+dt:0; if(T.th>150&&S.ect<70) setDTC(S,'P0128');
+  const fpLow=ENG.diesel?S.fuelP<0.8*(S.railT||300e5):S.fuelP<2.5e5;
+  T.fp=(S.pumpOn&&rpm>500&&fpLow)?(T.fp||0)+dt:0; if(T.fp>3) setDTC(S,'P0087');
+  T.map=(rpm<1&&S.ecuOn)?(T.map||0)+dt:0; if(T.map>1.5&&Math.abs(S.mapSens-P_AMB)>8000) setDTC(S,'P0106');
+}
+function setDTC(S,c){const e=S.ecu;if(!e.dtc.has(c)){e.dtc.add(c);e.dtcFresh++;}}
+function ecuInject(S,i,rpm,cycT){
+  const e=S.ecu,st=e.set;
+  if(!S.ecuOn||rpm<40||e.revCut||e.dfco){e.pw=0;e.duty=0;return 0;}
+  const kpa=S.mapSens/1000, ve=interp2(e.ve,rpm,kpa)/100;
+  let m=ve*S.mapSens*ENG.Vdc/(R_AIR*S.iatSens)/(ENG.afr*e.lamT)*e.warmEnr*(1+e.stft+e.ltft);
+  if(e.cranking) m*=e.crankEnr;
+  if(st.transComp){const cf=clamp((70-S.ectSens)/50,0,1),X=0.2*(1+0.8*cf),tau=0.22*(1+1.5*cf);
+    const ev=e.film[i]*Math.min(1,cycT/tau); let inj=Math.max(0,(m-ev)/(1-X)); e.film[i]+=X*inj-ev; m=inj;}
+  let pw=m/injFlow(st.injCc)*1000+deadTime(S.batt);
+  pw=Math.min(pw,cycT*1000*0.97); e.pw=pw; e.duty=pw/(cycT*1000); return pw;
+}
+function ecuDieselQ(S,i,rpm){
+  const e=S.ecu,st=e.set;
+  if(!S.ecuOn||rpm<40){e.q=0;return 0;}
+  let q=Math.max(interp2(e.ve,rpm,S.tps*100),e.qIdle);
+  if(e.cranking) q=Math.max(q,16+10*clamp((30-S.ectSens)/40,0,1));
+  const mAirEst=veTrue(rpm,S.mapSens)*0.98*S.mapSens*ENG.Vdc/(R_AIR*S.iatSens);
+  const qSmoke=mAirEst/(ENG.afr*st.smokeLam)*1e6;
+  if(!e.cranking) q=Math.min(q,qSmoke);
+  const lim=e.limp?3500:st.revLimit;
+  q*=clamp((lim+150-rpm)/300,0,1);
+  e.q=q; e.pw=q; e.duty=q/(ENG.def.qMax*1.3); return q;
+}
+function ecuSpark(S,i,rpm,kpa){
+  const e=S.ecu; if(e.cranking||rpm<400) return 8;
+  return clamp(interp2(e.ign,rpm,kpa)+e.set.advOffset+e.idleSpark-e.kr[i]+e.modSpark,-10,50);
+}
+
+/* ---------- Çevrim olayı: emme supabı kapanırken (φ=180) ---------- */
+function onIVC(S,i){
+  const c=S.cyl[i], e=S.ecu, F=S.faults, rpm=Math.max(S.rpm,1);
+  c.hi=(c.hi+1)%HIST; c.hist[c.hi].set(c.tr); c.hInfo[c.hi]=c.info;
+  const kpa=S.mapSens/1000, cycT=120/rpm;
+  let mAir=veTrue(rpm,S.map)*S.map*ENG.Vdc/(R_AIR*S.Tman)+(ENG.diesel?0:S.leakFlow*cycT/NCYL);
+  const pBDC=S.map*(1-0.07*(rpm*ENG.s/7000)**2);
+  let o, mInj;
+  if(ENG.diesel){
+    const q=ecuDieselQ(S,i,rpm);
+    mInj=q*1e-6*(F.inj&&i===1?0.55:1)*Math.sqrt(clamp(S.fuelP/(S.railT||300e5),0,1.1));
+    const soi=clamp(interp2(e.ign,rpm,q)+e.set.advOffset+(e.cranking?4:0),-5,35); e.adv=soi;
+    const glowOK=e.glowDone||S.ect>50, [dl,du]=dieselBurn(rpm,q,S.ect,glowOK&&!(F.plug&&i===2),e.cranking);
+    o={pBDC,mAir,mFuel:mInj,lam:1,adv:soi,rpm,kpa:S.map/1000,ect:S.ect,fire:false,start:360-soi+dl,dur:du,wm:2,covD:0,covS:0};
+  } else {
+    const pw=ecuInject(S,i,rpm,cycT);
+    mInj=Math.max(0,pw-deadTime(S.batt))*1e-3*injFlow(e.set.injCc)*Math.sqrt(Math.max(S.fuelP,0)/3e5)*(F.inj&&i===1?0.55:1);
+    const cf=clamp((70-S.ect)/50,0,1), X=0.25*(1+0.8*cf), tau=0.25*(1+1.5*cf);
+    const ev=c.film*Math.min(1,cycT/tau); c.film+=X*mInj-ev;
+    o={pBDC,mAir,mFuel:(1-X)*mInj+ev,lam:1,adv:0,rpm,kpa:S.map/1000,ect:S.ect,fire:false,covD:0,covS:0};
+  }
+  MODULES.forEach(m=>m.on&&m.onCycle&&m.onCycle(S,i,o,m));
+  o.lam=o.mFuel>1e-10?o.mAir/(o.mFuel*ENG.afr):99;
+  let cut=false, fire;
+  const lowLoad=clamp(1-o.kpa/60,0,1);
+  if(ENG.diesel){
+    fire=S.ecuOn&&o.mFuel>1e-9&&rpm>40;
+    const glowOK=e.glowDone||S.ect>50;
+    let pm=0; if(S.ect<30&&(!glowOK||(F.plug&&i===2))) pm=e.cranking?0.75:0.35*clamp((30-S.ect)/30,0,1);
+    if(rpm<150) pm+=0.3;
+    if(fire&&Math.random()<pm) fire=false;
+    o.covS=(Math.random()-0.5)*1.5; o.covD=(Math.random()-0.5)*0.05;
+  } else {
+    o.adv=ecuSpark(S,i,rpm,kpa); e.adv=o.adv;
+    cut=e.launchCut&&((e.cycC[i]+i)%3!==0);
+    const spark=S.ecuOn&&rpm>40&&!(F.plug&&i===2)&&!cut;
+    fire=spark&&o.mFuel>1e-9&&o.lam>0.45&&o.lam<1.75;
+    if(fire){const pm=clamp((o.lam-1.32)*2.2,0,1)+clamp((0.62-o.lam)*3,0,1)+(rpm<250?0.25:0);if(Math.random()<pm) fire=false;}
+    o.covS=(Math.random()-0.5)*(2+5*lowLoad+6*clamp(o.lam-1.1,0,1));
+    o.covD=(Math.random()-0.5)*(0.06+0.12*lowLoad);
+  }
+  o.fire=fire;
+  const r=cycleTrace(o,c.tr);
+  // vuruntu (benzin)
+  let knock=0;
+  if(fire&&!ENG.diesel){const pk=knockLimit(rpm,e.set.octane,S.ect,S.Tman), inten=r.pmax/pk-1;
+    if(inten>0&&Math.random()<clamp(0.15+inten*7,0,0.97)){
+      knock=Math.min(0.3,0.05+inten*1.6); const amp=r.pmax*knock, k0=Math.round((r.thP+180)/TR_RES);
+      const per=6*rpm/6300, dec=6*rpm*0.0011, ph=Math.random()*6.28;
+      for(let k=Math.max(0,k0);k<TR_N;k++){const t=(k-k0)*TR_RES; c.tr[k]+=amp*Math.sin(6.2832*t/per+ph)*Math.exp(-t/dec);}
+      if(e.set.knockCtl&&Math.random()<0.92){e.kr[i]=Math.min(12,e.kr[i]+2.5);}
+      e.knockCount++;
+      S.events.push({t:S.t,type:'knock',cyl:i,amp:knock});
+    }}
+  let egt;
+  if(!fire) egt=S.Tman+40;
+  else if(ENG.diesel) egt=273+110+1000/Math.max(o.lam,1)+0.02*rpm;
+  else egt=273+330+0.06*rpm*ENG.s+260*Math.min(o.kpa/100,1.8)+9*Math.max(0,(r.mfb50===r.mfb50?r.mfb50:40)-8)-(o.lam<1?600*(1-o.lam):150*Math.max(0,o.lam-1.1));
+  c.info={fired:fire,lam:o.lam,adv:o.adv,start:r.start,dur:r.dur,wm:o.wm||3,pmax:r.pmax,thP:r.thP,W:r.W,imep:r.W/ENG.Vdc,mfb50:r.mfb50,knock,mis:!fire&&o.mFuel>1e-9,
+    pEVO:r.pEVO,mInj,mAir:o.mAir,egt,rpm,cut:cut&&o.mFuel>1e-9};
+  S.fuelAcc+=mInj; S.fuelUsed+=mInj;
+  if(S.ecuOn&&rpm>500&&!e.revCut&&!e.dfco&&!cut&&o.mFuel>1e-9){e.cycC[i]++; if(c.info.mis) e.misC[i]++;
+    if(e.cycC[i]>=100){if(e.misC[i]>=6) setDTC(S,'P030'+(i+1));
+      if(e.misC.filter(x=>x>=6).length>=2) setDTC(S,'P0300'); e.misC[i]=0; e.cycC[i]=0;}}
+}
+function onEVO(S,i){
+  const c=S.cyl[i], inf=c.info;
+  let l=inf.fired?inf.lam:(inf.mInj>0?inf.lam+0.8:19.9);
+  S.lamQ.push([S.t+0.04+60/Math.max(S.rpm,200),Math.min(l,ENG.diesel?19.9:9.99)]);
+  if(inf.fired) S.events.push({t:S.t,type:'fire',cyl:i,amp:inf.imep});
+  else if(inf.cut&&Math.random()<0.45) S.events.push({t:S.t,type:'pop',cyl:i,amp:1});
+}
+
+/* ---------- Ana adım ---------- */
+function simStep(S,dt){
+  const F=S.faults, e=S.ecu;
+  const rpm=Math.max(0,S.omega)*30/Math.PI; S.rpm=rpm;
+  const cranking=S.key&&S.startBtn;
+  const running=S.key&&rpm>Math.min(450,ENG.idle*0.55);
+  const vb=!S.key?12.6:cranking?(F.batt?7.9:10.4)-rpm/1000:running?14.1:(e.glowT>0?11.6:12.3);
+  S.batt+=(vb-S.batt)*Math.min(1,dt/0.12);
+  const was=S.ecuOn; S.ecuOn=S.key&&S.batt>7.2;
+  if(S.ecuOn&&!was){S.primeT=2; if(ENG.diesel){e.glowDone=S.ect>50; e.glowT=S.ect>50?0:0.6+3.2*clamp((50-S.ect)/50,0,1); if(F.plug&&S.ect<50) setDTC(S,'P0380');}}
+  if(S.primeT>0) S.primeT-=dt;
+  S.pumpOn=S.ecuOn&&(S.primeT>0||rpm>40);
+  if(ENG.diesel){S.railT=rpm>40?Math.min(1600e5,300e5+rpm*0.6e5):300e5; const rail=S.pumpOn?S.railT*(F.pump?0.6:1):S.fuelP*0.995;
+    S.fuelP+=(rail-S.fuelP)*Math.min(1,dt/0.2);}
+  else {const fpT=S.pumpOn?(F.pump?2.1e5:3.0e5):S.fuelP*0.999; S.fuelP+=(fpT-S.fuelP)*Math.min(1,dt/(S.pumpOn?0.3:30));}
+  // modüller
+  S.boostTgt=0;
+  MODULES.forEach(m=>m.on&&m.preStep&&m.preStep(S,dt,m));
+  S.boost+=(S.boostTgt-S.boost)*Math.min(1,dt/0.08);
+  S.Tup=T_AMB+6+S.boost/1e5*22;
+  // pedal -> elektronik gaz kelebeği (dizelde pedal = yakıt isteği, kelebek açık)
+  const ped=S.pedalOverride!=null?S.pedalOverride:S.pedal;
+  S.tps+=(ped-S.tps)*Math.min(1,dt/0.035);
+  const thr=ENG.diesel?1:S.tps;
+  const plate=7+thr*83, Ath=ENG.Ath*(1-Math.cos(plate*D2R)/Math.cos(7*D2R));
+  const Aiac=ENG.diesel?0:ENG.iacMax*e.iac;
+  const pUp=P_AMB+S.boost;
+  S.mdotTh=orifice(Ath+Aiac+ENG.leak,pUp,S.map,S.Tup);
+  S.leakFlow=F.vac&&!ENG.diesel?Math.max(0,orifice(3e-6*ENG.sc,P_AMB,S.map,T_AMB)):0;
+  S.Tman+=((S.Tup+5+0.06*(S.ect-20))-S.Tman)*Math.min(1,dt/4);
+  S.mdotCyl=veTrue(rpm,S.map)*S.map/(R_AIR*S.Tman)*ENG.Vd*rpm/120;
+  S.map+=R_AIR*S.Tman/ENG.Vman*(S.mdotTh-S.mdotCyl)*dt;
+  S.map=clamp(S.map,3000,pUp*1.02+5000);
+  S.pexh=P_AMB+1200*Math.pow(rpm*ENG.s/1000,1.5)*(0.2+0.8*Math.min(S.map/1e5,2))+S.boost*1.15;
+  // lambda sensörü (taşıma gecikmesi + gecikme)
+  while(S.lamQ.length&&S.lamQ[0][0]<=S.t){S.lamExh=S.lamQ.shift()[1];}
+  if(S.lamQ.length>64) S.lamQ.splice(0,S.lamQ.length-64);
+  const lamTarget=F.o2&&!ENG.diesel?1.0:S.lamExh;
+  S.lamSens+=(lamTarget-S.lamSens)*Math.min(1,dt/0.08);
+  ecuStep(S,dt);
+  // silindir gaz torku
+  let Tg=0;
+  const fwd=S.omega>0;
+  for(let i=0;i<NCYL;i++){
+    const c=S.cyl[i], phi=mod(S.theta-CYL_OFS[i],720), pp=c.phiPrev;
+    if(fwd&&pp!==phi){
+      if(crossed(pp,phi,180)){onIVC(S,i);c.leak=1;}
+      if(crossed(pp,phi,540)) onEVO(S,i);
+    }
+    c.phiPrev=phi;
+    let p;
+    if(phi>=180&&phi<=540){const f=(phi-180)/TR_RES; const k=Math.min(TR_N-2,f|0); p=c.tr[k]+(c.tr[k+1]-c.tr[k])*(f-k);
+      if(rpm<400) c.leak*=Math.exp(-dt/0.6); p=P_AMB+(p-P_AMB)*c.leak;}   // segman kaçağı: yavaşta sıkışan gaz kaçar
+    else if(phi>540) p=S.pexh+(c.tr[TR_N-1]-S.pexh)*Math.exp(-(phi-540)/14);
+    else p=S.map*(1-0.05*Math.sin(phi*D2R)*(rpm*ENG.s/6000)*(rpm*ENG.s/6000));
+    c.p=p; Tg+=(p-P_AMB)*ENG.Ap*pistonDX(phi);
+  }
+  // sürtünme, marş, yük
+  const Sp=2*ENG.stroke*rpm/60, cold=1+0.7*clamp((80-S.oilT)/60,0,1);
+  let Tf=ENG.fric*(0.75+0.0442*Sp+0.00406*Sp*Sp)*1e5*cold*ENG.Vd/(4*Math.PI)+(running?1.5*ENG.sc:0);
+  const crankFree=(ENG.diesel?330:430)*Math.min(1,ENG.redline/7000*1.4);
+  const Ts=cranking?125*ENG.sc*(ENG.diesel?1.4:1)*clamp(1-rpm/(F.batt?crankFree*0.7:crankFree),0,1)*(F.batt?0.6:1):0;
+  const Tl=drivetrain(S,dt);
+  let Tn=Tg+Ts-Tl;
+  if(Math.abs(S.omega)<2){const Tf0=Tf*1.3; if(Math.abs(Tn)<=Tf0){S.omega*=Math.max(0,1-dt*60);Tn=0;} else Tn-=Math.sign(Tn)*Tf0;}
+  else Tn-=Math.sign(S.omega)*Tf;
+  const J=ENG.J+(S.load==='dyno'?0.25*ENG.sc:0);
+  S.omega+=Tn/J*dt;
+  if(S.omega<-30) S.omega=-30;
+  S.theta=mod(S.theta+S.omega*dt*R2D,720);
+  S.Tg=Tg; S.TgF+=(Tg-S.TgF)*Math.min(1,dt/0.25); S.Tf=Tf;
+  S.Tbrake=S.TgF-Tf;
+  // yakıt tüketimi
+  S.fuelAccT+=dt; if(S.fuelAccT>=0.25){S.fuelFlow=S.fuelAcc/S.fuelAccT;S.fuelAcc=0;S.fuelAccT=0;}
+  // termal
+  const fanOn=!F.fan&&(S.ect>98||(S.fan&&S.ect>93)); S.fan=fanOn;
+  const open=F.thermo?1:clamp((S.ect-86)/8,0,1), air=1+(fanOn?1.2:0)+S.veh.v/12;
+  const Qin=S.fuelFlow*ENG.lhv*(ENG.diesel?0.22:0.27);
+  const Qrad=ENG.kRad*open*(S.ect-25)*air+(F.thermo?0.3*ENG.kRad*(S.ect-25)*air:0)+25*ENG.sc*(S.ect-25);
+  S.ect+=(Qin-Qrad)/ENG.Ccool*dt;
+  S.oilT+=(S.ect-S.oilT)*dt/30;
+  S.egt+=((rpm>100?S.cyl[0].info.egt:S.egt*0.999+0.001*T_AMB)-S.egt)*Math.min(1,dt/0.6);
+  if(running) S.runT+=dt;
+  S.t+=dt;
+}
+
+/* ---------- Yük: dinamometre / araç ---------- */
+function drivetrain(S,dt){
+  if(S.load==='dyno'){
+    const d=S.dyno, Jt=ENG.J+0.25*ENG.sc; let T;
+    const [from,rate]=ENG.def.sweep;
+    if(d.sweep){const sw=d.sweep; S.pedalOverride=1; d.ctl='speed';
+      if(sw.phase==='prep'){d.target=from;sw.t+=dt;if(sw.t>1.6&&Math.abs(S.rpm-from)<80){sw.phase='run';sw.next=from+50;}}
+      else{d.target+=rate*dt;
+        if(d.target>=sw.next){if(d.target>from+120) sw.data.push([S.rpm,d.Tf+Jt*rate*Math.PI/30]);sw.next+=rate/7;}
+        if(d.target>=Math.min(S.ecu.set.revLimit,S.ecu.limp?3500:9e9)-100*(ENG.redline/7000)){d.runs.push(sw.data);if(d.runs.length>4)d.runs.shift();d.sweep=null;S.pedalOverride=null;d.target=sw.ret;S.events.push({t:S.t,type:'sweepDone'});}}}
+    const kp=8*ENG.sc, ki=30*ENG.sc;
+    if(d.ctl==='speed'){const err=S.omega-d.target*Math.PI/30; d.I=clamp(d.I+ki*err*dt,0,1200); T=clamp(kp*err+d.I,0,1200);}
+    else {T=d.torque*clamp(S.rpm/500,0,1); d.I=T;}
+    d.T=T; d.Tf+=(T-d.Tf)*Math.min(1,dt/0.12); return T;
+  }
+  if(S.load==='car'){
+    const v=S.veh, V=v.def; v.clutch+=(v.clutchCmd-v.clutch)*Math.min(1,dt/0.08);
+    const G=v.gear>0?V.gears[v.gear-1]*V.final:0; let Tc=0;
+    if(G>0){const wIn=v.v/V.rw*G, cap=V.clutch*Math.pow(1-v.clutch,2.2); Tc=clamp(45*ENG.sc*(S.omega-wIn),-cap,cap);}
+    const roll=v.v>0.05?0.012*V.mass*9.81:0, drag=0.5*1.2*V.cda*v.v*v.v, grade=V.mass*9.81*(v.grade||0);
+    const brakeF=v.brake*V.mass*9.0*(v.v>0.01?1:0)+(v.brakeExt||0);
+    const Fw=Tc*G*0.92/V.rw-drag-roll-grade-brakeF;
+    v.v=Math.max(0,v.v+Fw/(V.mass*(1+0.04*(G/10)*(G/10)))*dt); if(v.v<0.02&&Fw<=0) v.v=0;
+    v.odo+=v.v*dt; v.Tc=Tc; v.acc=Fw/V.mass; return Tc;
+  }
+  return 0;
+}
+
+</script>
+<script>
+/* js/shared.js */
+'use strict';
+/* =====================================================================
+   shared.js — ortak yardımcılar, ses motoru, motor değiştirme, ana döngü.
+   Görünümler (garaj / sürüş / laboratuvar) VIEWS'e kaydolur:
+     VIEWS.x = {el, input(rdt), render(rdt), slow(), onEngine(), onShow()}
+   ===================================================================== */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const CSSV=getComputedStyle(document.documentElement);
+const tok=n=>CSSV.getPropertyValue('--'+n).trim();
+const COL={bg:tok('bg'),panel:tok('panel'),panel2:tok('panel2'),face:tok('face'),line:tok('line'),line2:tok('line2'),ink:tok('ink'),mute:tok('mute'),dim:tok('dim'),
+  amber:tok('amber'),cyan:tok('cyan'),flame:tok('flame'),violet:tok('violet'),steel:tok('steel'),ok:tok('ok'),warn:tok('warn'),crit:tok('crit')};
+function hexA(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${clamp(a,0,1)})`;}
+function mixHex(h1,h2,t){const a=parseInt(h1.slice(1),16),b=parseInt(h2.slice(1),16);const f=(s)=>Math.round(((a>>s)&255)*(1-t)+((b>>s)&255)*t);return `rgb(${f(16)},${f(8)},${f(0)})`;}
+const MONO='"JetBrains Mono", ui-monospace, Consolas, monospace', DISP='"Chakra Petch", "Bahnschrift", "Segoe UI", sans-serif';
+function fitCanvas(cv){const r=cv.getBoundingClientRect(), d=window.devicePixelRatio||1;
+  const w=Math.max(10,Math.round(r.width*d)), h=Math.max(10,Math.round(r.height*d));
+  if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;}
+  const g=cv.getContext('2d'); g.setTransform(d,0,0,d,0,0); return [g,r.width,r.height];}
+const fmtL=v=>(v*1000).toFixed(1).replace('.0','')+' L';
+
+let sim=null, timeScale=1, soundOn=true;
+const keys={};
+const VIEWS={}; let curView='garage';
+let curEngine=ENGINES[1];
+
+/* Motoru değiştir, yeni simülasyon kur, sıcak rölantide başlat */
+function switchEngine(id,opts){
+  const def=ENGINES.find(e=>e.id===id)||ENGINES[1]; curEngine=def;
+  applyEngine(def); configureModulesForEngine(); sim=createSim();
+  if(!opts||opts.warm!==false) warmStart(opts&&opts.ect);
+  try{localStorage.setItem('motor.engine',id);}catch(e){}
+  for(const v of Object.values(VIEWS)) v.onEngine&&v.onEngine();
+}
+function warmStart(ect){
+  const S=sim; S.key=true; S.ecuOn=true; S.primeT=0; S.ect=ect??62; S.oilT=(ect??62)-7; S.fuelP=ENG.diesel?700e5:3e5; S.railT=700e5;
+  S.omega=ENG.idle*1.05*Math.PI/30; S.map=ENG.diesel?P_AMB:34000; S.ecu.o2t=20; S.batt=14; S.ecu.glowDone=true;
+  for(let k=0;k<6500;k++) simStep(S,0.0004); S.events.length=0; S.fuelUsed=0; S.veh.odo=0;
+}
+
+/* ---------- Ses ---------- */
+const AU={ctx:null};
+function auInit(){
+  if(AU.ctx){if(AU.ctx.state==='suspended') AU.ctx.resume(); return;}
+  let ctx; try{ctx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
+  AU.ctx=ctx;
+  const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-14; comp.ratio.value=5; comp.connect(ctx.destination);
+  AU.master=ctx.createGain(); AU.master.gain.value=soundOn?volume()*0.9:0; AU.master.connect(comp);
+  AU.lp=ctx.createBiquadFilter(); AU.lp.type='lowpass'; AU.lp.frequency.value=900; AU.lp.Q.value=0.7;
+  AU.res=ctx.createBiquadFilter(); AU.res.type='peaking'; AU.res.frequency.value=160; AU.res.Q.value=1.4; AU.res.gain.value=7;
+  const sh=ctx.createWaveShaper(); const cur=new Float32Array(1024); for(let i=0;i<1024;i++){const x=i/512-1;cur[i]=Math.tanh(2.2*x);} sh.curve=cur;
+  AU.lp.connect(AU.res); AU.res.connect(sh); sh.connect(AU.master);
+  const sr=ctx.sampleRate;
+  const mk=(dur,fn)=>{const b=ctx.createBuffer(1,Math.floor(sr*dur),sr),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=fn(i/sr);return b;};
+  AU.thump=mk(0.11,t=>Math.exp(-t/0.016)*Math.sin(2*Math.PI*(70+260*Math.exp(-t/0.01))*t)*0.9+(Math.random()*2-1)*Math.exp(-t/0.005)*0.55);
+  AU.ping=mk(0.05,t=>Math.exp(-t/0.008)*Math.sin(2*Math.PI*6300*t)*0.5);
+  AU.clack=mk(0.03,t=>(Math.random()*2-1)*Math.exp(-t/0.0025)*0.8+Math.sin(2*Math.PI*2300*t)*Math.exp(-t/0.004)*0.5);
+  AU.pop=mk(0.18,t=>(Math.random()*2-1)*Math.exp(-t/0.03)*0.9+Math.sin(2*Math.PI*55*t)*Math.exp(-t/0.05));
+  AU.hiss=mk(0.6,t=>(Math.random()*2-1)*Math.exp(-t/0.18)*0.35);
+  AU.crash=mk(0.7,t=>(Math.random()*2-1)*Math.exp(-t/0.12)*0.9+Math.sin(2*Math.PI*48*t)*Math.exp(-t/0.15));
+  AU.blip=mk(0.12,t=>Math.sin(2*Math.PI*880*t)*Math.exp(-t/0.05)*0.4);
+  const noise=mk(2,()=>Math.random()*2-1); AU.noise=noise;
+  const ns=ctx.createBufferSource(); ns.buffer=noise; ns.loop=true;
+  AU.bp=ctx.createBiquadFilter(); AU.bp.type='bandpass'; AU.bp.frequency.value=400; AU.bp.Q.value=0.9;
+  AU.ng=ctx.createGain(); AU.ng.gain.value=0; ns.connect(AU.bp); AU.bp.connect(AU.ng); AU.ng.connect(AU.master); ns.start();
+  // rüzgâr / lastik
+  const ws=ctx.createBufferSource(); ws.buffer=noise; ws.loop=true; ws.playbackRate.value=0.7;
+  AU.wf=ctx.createBiquadFilter(); AU.wf.type='lowpass'; AU.wf.frequency.value=700;
+  AU.wg=ctx.createGain(); AU.wg.gain.value=0; ws.connect(AU.wf); AU.wf.connect(AU.wg); AU.wg.connect(AU.master); ws.start();
+  const ts_=ctx.createBufferSource(); ts_.buffer=noise; ts_.loop=true;
+  AU.sqf=ctx.createBiquadFilter(); AU.sqf.type='bandpass'; AU.sqf.frequency.value=1400; AU.sqf.Q.value=6;
+  AU.sqg=ctx.createGain(); AU.sqg.gain.value=0; ts_.connect(AU.sqf); AU.sqf.connect(AU.sqg); AU.sqg.connect(AU.master); ts_.start();
+  // marş motoru
+  AU.st=ctx.createOscillator(); AU.st.type='sawtooth'; AU.st.frequency.value=110;
+  AU.stf=ctx.createBiquadFilter(); AU.stf.type='lowpass'; AU.stf.frequency.value=900;
+  AU.sg=ctx.createGain(); AU.sg.gain.value=0; AU.st.connect(AU.stf); AU.stf.connect(AU.sg); AU.sg.connect(AU.master); AU.st.start();
+  // yakıt pompası
+  AU.pu=ctx.createOscillator(); AU.pu.type='square'; AU.pu.frequency.value=180; AU.pg=ctx.createGain(); AU.pg.gain.value=0;
+  const pf=ctx.createBiquadFilter(); pf.type='lowpass'; pf.frequency.value=500; AU.pu.connect(pf); pf.connect(AU.pg); AU.pg.connect(AU.master); AU.pu.start();
+  // turbo ıslığı
+  AU.tu=ctx.createOscillator(); AU.tu.type='sine'; AU.tu.frequency.value=2000; AU.tg=ctx.createGain(); AU.tg.gain.value=0;
+  AU.tu.connect(AU.tg); AU.tg.connect(AU.master); AU.tu.start();
+}
+function volume(){const el=$('#rVol'); return el?+el.value/100:0.6;}
+function setSound(on){soundOn=on; $$('.bSound').forEach(b=>b.firstChild.textContent=on?'Ses: açık ':'Ses: kapalı '); if(AU.master) AU.master.gain.value=on?volume()*0.9:0;}
+function auPlay(buf,when,gain,rate,dest){const s=AU.ctx.createBufferSource(); s.buffer=buf; s.playbackRate.value=rate;
+  const g=AU.ctx.createGain(); g.gain.value=gain; s.connect(g); g.connect(dest||AU.master); s.start(when);}
+function auOneShot(name,gain){if(!AU.ctx||!soundOn) return; auPlay(AU[name],AU.ctx.currentTime+0.01,gain,1);}
+function auFrame(events,frameStart,scale,extra){
+  if(!AU.ctx) return;
+  const c=AU.ctx, now=c.currentTime, base=now+0.06, S=sim, sd=ENG.def.snd||{};
+  const tp=S.tps, r=S.rpm, rn=r*ENG.s;
+  AU.lp.frequency.setTargetAtTime((500+2600*tp+rn*0.18)*(sd.lp||1),now,0.05);
+  AU.res.frequency.setTargetAtTime((sd.res||120)+rn*0.02,now,0.1);
+  let n=0;
+  for(const ev of events){
+    const when=base+Math.max(0,(ev.t-frameStart)/scale);
+    if(ev.type==='fire'){ if(n++>110) continue;
+      const a=clamp(ev.amp/12e5,0.05,1.3), bank=sd.burble&&ev.cyl>=4?0.86:1;
+      auPlay(AU.thump,when,(0.10+0.32*Math.pow(a,0.8)*(0.55+0.6*tp))*(sd.burble&&ev.cyl>=4?1.15:1)*(ENG.n>6?0.8:1),(0.9+0.2*Math.random()+rn/9000)*bank*(sd.res>200?1.4:1),AU.lp);
+      if(sd.clatter) auPlay(AU.clack,when+0.001,0.10+0.12*(1-tp*0.5),0.9+0.2*Math.random());}
+    else if(ev.type==='knock') auPlay(AU.ping,when,0.25+ev.amp*1.2,0.95+0.1*Math.random());
+    else if(ev.type==='pop') auPlay(AU.pop,when,0.55,0.8+0.4*Math.random());
+    else if(ev.type==='bov') auPlay(AU.hiss,when,0.35+0.4*Math.min(ev.amp,1.4),1);
+  }
+  const slow=scale<0.3?0.25:1;
+  AU.ng.gain.setTargetAtTime(S.rpm>50?(0.012+0.05*tp)*Math.min(1,rn/3000)*slow:0,now,0.05);
+  AU.bp.frequency.setTargetAtTime(250+rn*0.25,now,0.05);
+  const cr=S.key&&S.startBtn;
+  AU.sg.gain.setTargetAtTime(cr?0.07:0,now,0.03);
+  AU.st.frequency.setTargetAtTime((60+r*0.55)*Math.max(scale,0.05),now,0.03);
+  AU.pg.gain.setTargetAtTime(S.pumpOn&&S.rpm<60?0.02:S.pumpOn?0.004:0,now,0.05);
+  const ts=S.turboSpd||0;
+  AU.tg.gain.setTargetAtTime(modOn('turbo')&&ts>0.1?0.012*ts*slow:0,now,0.08);
+  AU.tu.frequency.setTargetAtTime(1500+ts*6500,now,0.08);
+  const v=extra&&extra.wind?S.veh.v:0;
+  AU.wg.gain.setTargetAtTime(Math.min(0.12,v*v*0.00012),now,0.1); AU.wf.frequency.setTargetAtTime(300+v*25,now,0.1);
+  AU.sqg.gain.setTargetAtTime(extra&&extra.squeal?Math.min(0.09,extra.squeal*0.09):0,now,0.04);
+}
+
+/* ---------- Görünüm geçişi ---------- */
+function showView(v){
+  curView=v; $$('#viewNav button').forEach(b=>b.classList.toggle('act',b.dataset.v===v));
+  for(const [k,V] of Object.entries(VIEWS)) V.el.hidden=k!==v;
+  $('#pCL').hidden=v!=='lab'||ENG.diesel; $('#pRev').hidden=v!=='lab';
+  VIEWS[v]&&VIEWS[v].onShow&&VIEWS[v].onShow();
+  try{localStorage.setItem('motor.view',v);}catch(e){}
+}
+
+/* ---------- Ana döngü ---------- */
+let lastTs=0, lastFrameWall=0, slowT=0;
+function frame(ts,noRaf){
+  lastFrameWall=performance.now();
+  try{tick(ts);}catch(e){if(!frame.err){frame.err=1; console.error(e);} showFatal(e);}
+  if(!noRaf) requestAnimationFrame(frame);
+}
+/* bir çizim/fizik hatası döngüyü öldürmesin; ekranda kısa bir uyarı göster */
+function showFatal(e){let el=$('#fatal'); if(!el){el=document.createElement('div'); el.id='fatal';
+  el.style.cssText='position:fixed;left:16px;bottom:16px;z-index:99;max-width:min(560px,calc(100vw - 32px));background:var(--crit);color:var(--bg);font:12px var(--f-mono);padding:8px 10px;border-radius:4px';
+  document.body.appendChild(el);} el.textContent='Hata: '+(e&&e.message||e)+' — sayfayı yenileyin; sürerse bu metni bana iletin.';}
+function tick(ts){
+  const rdt=lastTs?clamp((ts-lastTs)/1000,0,0.05):0.016; lastTs=Math.max(ts,lastTs);
+  const S=sim, V=VIEWS[curView];
+  if(V&&V.input) V.input(rdt);
+  const ts_=V&&V.timeScale?V.timeScale():timeScale;
+  const simDt=rdt*ts_, t0=S.t;
+  const steps=clamp(Math.ceil(Math.max(Math.abs(S.omega)*simDt/(1.2*D2R),simDt/0.0004)),1,4000), h=simDt/steps;
+  for(let q=0;q<steps;q++){simStep(S,h); V&&V.sample&&V.sample();}
+  if(V&&V.post) V.post(rdt);
+  if(soundOn) auFrame(S.events,t0,ts_,V&&V.audio?V.audio():null);
+  V&&V.events&&V.events(S.events);
+  S.events.length=0;
+  if(V&&V.render) V.render(rdt);
+  slowT+=rdt; if(slowT>0.12){slowT=0; V&&V.slow&&V.slow(); updStatus();}
+}
+setInterval(()=>{if(performance.now()-lastFrameWall>250) frame(performance.now(),true);},100); // rAF durursa (arka plan) yedek
+function updStatus(){const S=sim,e=S.ecu,p=$('#pState');
+  let t='KAPALI',c='';
+  if(S.key){ if(S.startBtn&&S.rpm<ENG.idle*0.7){t='MARŞ';c='warn';} else if(S.rpm>ENG.idle*0.45){t=e.limp?'KORUMA MODU':'ÇALIŞIYOR';c=e.limp?'crit':'on';} else if(S.runT>0){t='STOP ETTİ';c='crit';} else if(ENG.diesel&&e.glowT>0){t='KIZDIRMA';c='warn';} else t='KONTAK AÇIK';}
+  p.textContent=t; p.className='pill '+c;
+  const m=$('#pMIL'); m.className='pill '+(e.dtc.size&&S.key?'warn':''); m.textContent=e.dtc.size?`MOTOR ARIZA · ${e.dtc.size}`:'MOTOR ARIZA';
+  $('#pEng').textContent=ENG.def.short+' · '+ENG.def.veh.name;
+}
+function setKey(on){sim.key=on; if(!on) sim.runT=0; $$('.bKey').forEach(b=>{b.classList.toggle('on',on); b.firstChild.textContent=on?'Kontak açık ':'Kontak kapalı ';});}
+function startOn(){auInit(); sim.startBtn=true; $$('.bStart').forEach(b=>b.classList.add('held'));}
+function startOff(){sim.startBtn=false; $$('.bStart').forEach(b=>b.classList.remove('held'));}
+function holdButton(el,on,off){el.addEventListener('pointerdown',e=>{e.preventDefault(); el.setPointerCapture(e.pointerId); on();});
+  el.addEventListener('pointerup',off); el.addEventListener('pointercancel',off); el.addEventListener('lostpointercapture',off);}
+document.addEventListener('pointerdown',()=>auInit(),{once:true});
+const typing=()=>{const a=document.activeElement; return a&&(a.tagName==='INPUT'&&a.type!=='range'&&a.type!=='checkbox'||a.tagName==='SELECT'||a.tagName==='TEXTAREA');};
+document.addEventListener('keydown',e=>{if(typing()||e.ctrlKey||e.metaKey||e.altKey) return; const V=VIEWS[curView]; if(V&&V.key) V.key(e.key.toLowerCase(),true,e);});
+document.addEventListener('keyup',e=>{const V=VIEWS[curView]; if(V&&V.key) V.key(e.key.toLowerCase(),false,e);});
+window.addEventListener('blur',()=>{for(const k in keys) keys[k]=false; startOff(); if(sim) sim.nitroBtn=false;});
+
+</script>
+<script>
+/* js/lab.js */
+'use strict';
+/* =====================================================================
+   lab.js — LABORATUVAR: kesit, silindir şeridi, göstergeler, osiloskop,
+   p–θ, dinamometre, ECU sekmeleri. VIEWS.lab olarak kaydolur.
+   ===================================================================== */
+let strobe=false, selCyl=0, pvMode='pt', visTheta=0;
+
+/* ---------- Kesit görünüm ---------- */
+const cvE=$('#cvEngine'), cvS=$('#cvStrip');
+function liftAt(phi,open,dur){const x=mod(phi-open,720); return x<dur?Math.pow(Math.sin(Math.PI*x/dur),2):0;}
+function inLift(phi){return liftAt(phi,IVO,IVC_L+720-IVO);} function exLift(phi){return liftAt(phi,EVO,EVC-EVO);}
+function strokeName(phi){return phi<180?'EMME':phi<360?'SIKIŞTIRMA':phi<540?'İŞ (GENİŞLEME)':'EGZOZ';}
+function burnFrac(inf,phi){if(!inf.fired||phi<inf.start) return 0; const z=(phi-inf.start)/inf.dur; return 1-Math.exp(-5*Math.pow(z,inf.wm||3));}
+function gasColor(c,phi,alpha){
+  const inf=c.info;
+  if(phi<180) return hexA(COL.cyan,0.18*alpha);
+  if(phi<540){const xb=burnFrac(inf,phi);
+    if(!inf.fired||xb<0.02) return hexA(COL.cyan,(0.18+0.35*clamp((phi-180)/180,0,1))*alpha);
+    const cool=clamp((phi-380)/160,0,1);
+    return mixHex(mixHex('#fff2b0',COL.flame,clamp(xb*1.2,0,1)),'#5a2316',cool);}
+  const t=(phi-540)/180; return inf.fired?mixHex('#6a3a24',COL.panel2,t):hexA(COL.cyan,0.25*(1-t));
+}
+function label(g,x,y,tx,ty,txt,align){g.strokeStyle=COL.dim;g.lineWidth=1;g.beginPath();g.moveTo(x,y);g.lineTo(tx,ty);g.stroke();
+  g.fillStyle=COL.mute;g.font=`10.5px ${MONO}`;g.textAlign=align||'left';g.textBaseline='middle';g.fillText(txt,tx+(align==='right'?-4:4),ty);}
+function bankName(i){const d=ENG.def; if(d.layout.startsWith('V')) return i<ENG.n/2?'sol sıra':'sağ sıra'; return '';}
+let dashIn=0,dashEx=0;
+function drawEngine(rdt){
+  const [g,W,H]=fitCanvas(cvE);
+  g.fillStyle=COL.face; g.fillRect(0,0,W,H);
+  if(W<160||H<160) return;
+  g.strokeStyle=hexA(COL.line,0.5); g.lineWidth=1; g.beginPath();
+  for(let x=0;x<W;x+=24){g.moveTo(x+0.5,0);g.lineTo(x+0.5,H);} for(let y=0;y<H;y+=24){g.moveTo(0,y+0.5);g.lineTo(W,y+0.5);} g.stroke();
+  const S=sim, c=S.cyl[selCyl], th=strobe?visTheta:S.theta, phi=mod(th-CYL_OFS[selCyl],720), inf=c.info, D=ENG.diesel;
+  const topBar=46;
+  // çizim ölçeği strok/çap oranına göre: kısa strok motorlar daha geniş görünür
+  const B=Math.min(W*0.2,(H-topBar-16)/(1.6+3.0*ENG.stroke/ENG.bore)), k=B/ENG.bore;
+  const cx=W*0.5, rp=ENG.r*k, Lr=ENG.rod*k;
+  const crankY=H-rp-B*0.42;
+  const pinFromTop=B*0.30, pistH=B*0.62;
+  const pistTopTDC=crankY-rp-Lr-pinFromTop;
+  const deckY=pistTopTDC-B*0.05;
+  const roofY=deckY-(D?B*0.06:B*0.2);
+  const headTop=deckY-B*0.78;
+  const pistTop=pistTopTDC+pistonX(phi)*k;
+  const a=phi*D2R, cpx=cx+rp*Math.sin(a), cpy=crankY-rp*Math.cos(a), pinY=pistTop+pinFromTop;
+  const blockW=B*0.36, linerBot=pistTopTDC+2*rp+pistH*0.55;
+  g.strokeStyle=COL.line2; g.setLineDash([4,4]); g.beginPath(); g.arc(cx,crankY,rp+B*0.38,0,Math.PI*2); g.stroke(); g.setLineDash([]);
+  g.fillStyle=COL.panel2; g.strokeStyle=COL.line2; g.lineWidth=1.2;
+  g.fillRect(cx-B/2-blockW,deckY,blockW,linerBot-deckY); g.strokeRect(cx-B/2-blockW,deckY,blockW,linerBot-deckY);
+  g.fillRect(cx+B/2,deckY,blockW,linerBot-deckY); g.strokeRect(cx+B/2,deckY,blockW,linerBot-deckY);
+  const cool=clamp((S.ect-20)/90,0,1), jc=mixHex(COL.cyan,COL.crit,cool);
+  g.fillStyle=jc; g.globalAlpha=0.45;
+  g.fillRect(cx-B/2-blockW*0.72,deckY+4,blockW*0.36,Math.min(B*1.15,linerBot-deckY-8)); g.fillRect(cx+B/2+blockW*0.36,deckY+4,blockW*0.36,Math.min(B*1.15,linerBot-deckY-8));
+  g.globalAlpha=1;
+  // silindir içi gaz
+  g.save(); g.beginPath();
+  g.moveTo(cx-B/2,pistTop); g.lineTo(cx-B/2,deckY-B*0.03); g.lineTo(cx,roofY); g.lineTo(cx+B/2,deckY-B*0.03); g.lineTo(cx+B/2,pistTop); g.closePath();
+  g.fillStyle=COL.face; g.fill(); g.clip();
+  const xb=(phi>=180&&phi<540)?burnFrac(inf,phi):0;
+  g.fillStyle=gasColor(c,phi,1); g.fillRect(cx-B,roofY-B*0.2,B*2,pistTop-roofY+B*0.3);
+  if(xb>0.01&&xb<0.999){
+    const oy=D?pistTop-B*0.08:roofY+B*0.04, rr=B*1.25*Math.cbrt(xb), gr=g.createRadialGradient(cx,oy,1,cx,oy,rr);
+    gr.addColorStop(0,'#fff6d0'); gr.addColorStop(0.55,COL.flame); gr.addColorStop(0.92,hexA(COL.flame,0.85)); gr.addColorStop(1,hexA(COL.cyan,0.3));
+    g.fillStyle=hexA(COL.cyan,0.45); g.fillRect(cx-B,roofY-B*0.2,B*2,pistTop-roofY+B*0.3);
+    g.fillStyle=gr; g.beginPath(); g.arc(cx,oy,rr,0,Math.PI*2); g.fill();
+  }
+  if(inf.knock>0&&phi>360+inf.thP&&phi<360+inf.thP+25){g.strokeStyle=COL.crit;g.lineWidth=3;g.strokeRect(cx-B/2+2,roofY,B-4,pistTop-roofY-2);}
+  g.restore();
+  g.strokeStyle=COL.steel; g.lineWidth=1.5; g.beginPath(); g.moveTo(cx-B/2,deckY); g.lineTo(cx-B/2,linerBot); g.moveTo(cx+B/2,deckY); g.lineTo(cx+B/2,linerBot); g.stroke();
+  // kafa + portlar
+  const ivx=cx-B*0.24, evx=cx+B*0.24, seatY=deckY-B*0.11;
+  g.fillStyle=COL.panel2; g.strokeStyle=COL.line2;
+  g.beginPath(); g.moveTo(cx-B/2-blockW,deckY); g.lineTo(cx-B/2-blockW,headTop); g.lineTo(cx+B/2+blockW,headTop); g.lineTo(cx+B/2+blockW,deckY);
+  g.lineTo(cx+B/2,deckY); g.lineTo(cx+B/2,deckY-B*0.03); g.lineTo(cx,roofY); g.lineTo(cx-B/2,deckY-B*0.03); g.lineTo(cx-B/2,deckY); g.closePath(); g.fill(); g.stroke();
+  if(D){ // dizel piston çanağı
+    g.strokeStyle=COL.steel; g.lineWidth=1; g.beginPath(); g.arc(cx,pistTop-B*0.02,B*0.2,0.15*Math.PI,0.85*Math.PI); g.stroke();}
+  const portW=B*0.24;
+  const inPath=[[ivx,seatY],[cx-B*0.5,deckY-B*0.42],[cx-B/2-blockW,deckY-B*0.5],[W*0.03,deckY-B*0.5]];
+  const exPath=[[evx,seatY],[cx+B*0.5,deckY-B*0.42],[cx+B/2+blockW,deckY-B*0.5],[W*0.97,deckY-B*0.5]];
+  const path=(P)=>{g.beginPath();g.moveTo(P[0][0],P[0][1]);g.quadraticCurveTo(P[1][0],P[1][1],P[2][0],P[2][1]);g.lineTo(P[3][0],P[3][1]);};
+  g.lineCap='butt';
+  path(inPath); g.strokeStyle=COL.line2; g.lineWidth=portW+4; g.stroke();
+  path(inPath); g.strokeStyle=mixHex(COL.face,COL.cyan,0.18+0.25*(D?1:S.tps)+(S.boost>2e4?0.2:0)); g.lineWidth=portW; g.stroke();
+  const egtc=clamp((S.egt-500)/600,0,1);
+  path(exPath); g.strokeStyle=mixHex(COL.line2,COL.flame,egtc*0.8); g.lineWidth=portW+4; g.stroke();
+  path(exPath); g.strokeStyle=mixHex(COL.face,'#7a3a20',0.4+0.5*egtc); g.lineWidth=portW; g.stroke();
+  dashIn-=rdt*(8+S.mdotTh*1500/ENG.sc)*Math.min(1,timeScale*4); dashEx-=rdt*(8+S.mdotCyl*1500/ENG.sc)*Math.min(1,timeScale*4);
+  g.setLineDash([5,9]); g.lineWidth=1.4;
+  g.lineDashOffset=dashIn; path(inPath); g.strokeStyle=hexA(COL.cyan,inLift(phi)>0.05?0.9:0.35); g.stroke();
+  g.lineDashOffset=-dashEx; path(exPath); g.strokeStyle=hexA('#d9b49a',exLift(phi)>0.05?0.85:0.25); g.stroke();
+  g.setLineDash([]);
+  // gaz kelebeği (dizelde yok: açık boğaz)
+  const tbx=cx-B/2-blockW-B*0.95, tby=deckY-B*0.5, plate=(7+(D?1:S.tps)*83)*D2R;
+  g.strokeStyle=COL.steel; g.lineWidth=2; g.beginPath(); g.arc(tbx,tby,portW*0.62,0,Math.PI*2); g.stroke();
+  if(!D){g.lineWidth=3; g.strokeStyle=COL.amber; g.beginPath(); g.moveTo(tbx-Math.sin(plate)*portW*0.55,tby-Math.cos(plate)*portW*0.55); g.lineTo(tbx+Math.sin(plate)*portW*0.55,tby+Math.cos(plate)*portW*0.55); g.stroke();}
+  // enjektör: benzinde portta, dizelde yanma odasının ortasında
+  let pwDeg, inj;
+  if(D){pwDeg=8+sim.ecu.q*0.35; inj=S.rpm>40&&sim.ecu.q>0.2&&mod(phi-(360-inf.adv),720)<pwDeg;}
+  else {pwDeg=sim.ecu.pw*S.rpm*6/1000; inj=S.rpm>40&&pwDeg>0&&mod(650-phi,720)<pwDeg;}
+  const ijx=D?cx:cx-B/2-blockW*0.35, ijy=D?headTop-B*0.05:deckY-B*0.86, ang=D?Math.PI/2:Math.atan2(seatY-ijy,ivx-ijx);
+  g.save(); g.translate(ijx,ijy); g.rotate(ang);
+  const il_=D?(roofY-ijy):B*0.22;
+  g.fillStyle=COL.steel; g.fillRect(D?0:-B*0.22,-B*0.045,D?il_:B*0.22,B*0.09); g.fillStyle=COL.violet; g.fillRect(D?-B*0.12:-B*0.30,-B*0.06,B*0.09,B*0.12);
+  if(inj){const L=D?B*0.45:B*0.42, x0=D?il_:0; const gr=g.createLinearGradient(x0,0,x0+L,0); gr.addColorStop(0,hexA(COL.violet,0.9)); gr.addColorStop(1,hexA(COL.violet,0));
+    g.fillStyle=gr; g.beginPath(); g.moveTo(x0,0); g.lineTo(x0+L,-B*(D?0.3:0.09)); g.lineTo(x0+L,B*(D?0.3:0.09)); g.closePath(); g.fill();}
+  g.restore();
+  // supaplar
+  const drawValve=(vx,lift,dir,col)=>{const L=B*0.115*lift;
+    const stemTopX=vx+dir*B*0.20, stemTopY=headTop+B*0.02;
+    const dx=stemTopX-vx, dy=stemTopY-seatY, len=Math.hypot(dx,dy), ux=dx/len, uy=dy/len;
+    const bx=vx-ux*L, by=seatY-uy*L;
+    g.strokeStyle=col; g.lineWidth=2.2; g.beginPath(); g.moveTo(bx,by); g.lineTo(bx+ux*len*1.05,by+uy*len*1.05); g.stroke();
+    g.lineWidth=3.2; g.beginPath(); g.moveTo(bx-uy*B*0.13,by+ux*B*0.13); g.lineTo(bx+uy*B*0.13,by-ux*B*0.13); g.stroke();
+    g.strokeStyle=COL.dim; g.lineWidth=1; g.beginPath();
+    const s0x=bx+ux*len*0.62, s0y=by+uy*len*0.62;
+    for(let q=0;q<=8;q++){const t=q/8*len*0.36, w=(q%2?1:-1)*B*0.06; const px=s0x+ux*t-uy*w, py=s0y+uy*t+ux*w; q?g.lineTo(px,py):g.moveTo(px,py);} g.stroke();
+    return [bx+ux*len*1.05,by+uy*len*1.05];
+  };
+  const il=inLift(phi), el=exLift(phi);
+  const iTop=drawValve(ivx,il,-1,COL.cyan), eTop=drawValve(evx,el,1,'#d9a07a');
+  const drawCam=(x,y,offs)=>{const R=B*0.085; const ca=(phi/2+offs)*D2R;
+    g.fillStyle=COL.panel; g.strokeStyle=COL.steel; g.lineWidth=1.3; g.beginPath();
+    for(let q=0;q<=48;q++){const b=q/48*Math.PI*2; const rr=R+R*0.75*Math.pow(Math.max(0,Math.cos(b)),4); const pa=b+ca; const px=x+rr*Math.sin(pa), py=y+rr*Math.cos(pa); q?g.lineTo(px,py):g.moveTo(px,py);}
+    g.closePath(); g.fill(); g.stroke(); g.fillStyle=COL.steel; g.beginPath(); g.arc(x,y,2,0,7); g.fill();};
+  const camY=headTop-B*0.1;
+  drawCam(iTop[0],camY,-((IVO+(IVC_L+720-IVO)/2)%720)/2); drawCam(eTop[0],camY,-((EVO+(EVC-EVO)/2)%720)/2);
+  // buji (benzin) ya da kızdırma bujisi (dizel)
+  const sparkPhi=360-inf.adv;
+  if(D){const gx=cx+B*0.16, glow=sim.ecu.glowT>0;
+    g.strokeStyle=glow?COL.flame:COL.steel; g.lineWidth=B*0.05; g.beginPath(); g.moveTo(gx+B*0.1,headTop+B*0.05); g.lineTo(gx,roofY+B*0.02); g.stroke();
+    if(glow){g.fillStyle=COL.flame; g.shadowColor=COL.flame; g.shadowBlur=10; g.beginPath(); g.arc(gx,roofY+B*0.02,3,0,7); g.fill(); g.shadowBlur=0;}}
+  else {
+    g.fillStyle=COL.steel; g.fillRect(cx-B*0.035,headTop-B*0.18,B*0.07,roofY-headTop+B*0.16); g.fillStyle='#e9e2d0'; g.fillRect(cx-B*0.05,headTop-B*0.32,B*0.1,B*0.16);
+    if(S.ecuOn&&mod(phi-sparkPhi,720)<7&&!(S.faults.plug&&selCyl===2)){g.fillStyle='#fff';g.shadowColor='#9fe8ff';g.shadowBlur=14;g.beginPath();g.arc(cx,roofY+2,4,0,7);g.fill();g.shadowBlur=0;}}
+  // piston
+  g.fillStyle='#7f8d98'; g.strokeStyle='#cfd8de'; g.lineWidth=1;
+  g.fillRect(cx-B/2+2,pistTop,B-4,pistH); g.strokeRect(cx-B/2+2,pistTop,B-4,pistH);
+  g.strokeStyle='#4b5862'; g.beginPath(); for(let q=1;q<=3;q++){g.moveTo(cx-B/2+2,pistTop+q*B*0.055);g.lineTo(cx+B/2-2,pistTop+q*B*0.055);} g.stroke();
+  if(D){g.fillStyle=gasColor(c,phi,1); g.beginPath(); g.ellipse(cx,pistTop+1,B*0.2,B*0.06,0,0,Math.PI); g.fill();}
+  // biyel + krank
+  g.strokeStyle='#b3c0c9'; g.lineWidth=B*0.11; g.lineCap='round'; g.beginPath(); g.moveTo(cx,pinY); g.lineTo(cpx,cpy); g.stroke(); g.lineCap='butt';
+  g.fillStyle=COL.face; g.beginPath(); g.arc(cx,pinY,B*0.05,0,7); g.fill(); g.strokeStyle='#cfd8de'; g.lineWidth=1.5; g.stroke();
+  g.save(); g.translate(cx,crankY); g.rotate(a);
+  g.fillStyle='#5d6a74'; g.strokeStyle='#9aa8b2'; g.lineWidth=1;
+  g.beginPath(); g.arc(0,0,rp*1.55,Math.PI*0.2+Math.PI/2,Math.PI*0.8+Math.PI/2); g.lineTo(0,0); g.closePath(); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(-B*0.1,0); g.lineTo(-B*0.08,-rp); g.lineTo(B*0.08,-rp); g.lineTo(B*0.1,0); g.closePath(); g.fill(); g.stroke();
+  g.restore();
+  g.fillStyle='#8996a0'; g.beginPath(); g.arc(cx,crankY,B*0.09,0,7); g.fill();
+  g.fillStyle=COL.face; g.beginPath(); g.arc(cpx,cpy,B*0.075,0,7); g.fill(); g.strokeStyle='#cfd8de'; g.lineWidth=2; g.stroke();
+  // etiketler
+  if(W>460){
+    label(g,tbx,tby+portW*0.6,tbx+8,tby+B*0.75,D?'emme boğazı (kelebeksiz)':'gaz kelebeği '+Math.round(S.tps*100)+'%','left');
+    if(D) label(g,cx-B*0.04,headTop-B*0.02,cx-B*0.45,headTop-B*0.4,'enjektör '+sim.ecu.q.toFixed(1)+' mg','right');
+    else label(g,ijx-B*0.25,ijy-B*0.05,ijx-B*0.4,ijy-B*0.3,'enjektör '+sim.ecu.pw.toFixed(2)+' ms','right');
+    label(g,iTop[0],camY,iTop[0]-B*0.5,camY-B*0.05,'emme kamı','right');
+    label(g,eTop[0],camY,eTop[0]+B*0.5,camY-B*0.05,'egzoz kamı');
+    if(D) label(g,cx+B*0.22,headTop+B*0.08,cx+B*0.42,headTop-B*0.36,'kızdırma bujisi'+(sim.ecu.glowT>0?' · ISINIYOR':''));
+    else label(g,cx+B*0.05,headTop-B*0.25,cx+B*0.32,headTop-B*0.38,'buji '+inf.adv.toFixed(1)+'° öAÖN');
+    label(g,cx+B/2-6,pistTop+pistH*0.5,cx+B/2+blockW+12,pistTop+pistH*0.5,'piston');
+    label(g,(cx+cpx)/2,(pinY+cpy)/2,cx-B/2-blockW-12,(pinY+cpy)/2,'biyel','right');
+    label(g,cx+rp*1.2,crankY+rp*0.6,cx+B/2+blockW+12,crankY+rp*0.9,'krank mili');
+    label(g,cx+B/2+blockW*0.55,deckY+B*0.5,cx+B/2+blockW+12,deckY+B*0.32,'su ceketi '+S.ect.toFixed(0)+' °C');
+    label(g,W*0.93,deckY-B*0.5,W*0.9,deckY-B*0.8,'egzoz '+Math.round(S.egt-273)+' °C','right');
+  }
+  // üst şerit: 720° faz çizelgesi
+  const x0=12,x1=W-12, fx=(p)=>x0+(x1-x0)*p/720, y0=8;
+  const segs=[[0,180,'EMME',COL.cyan],[180,360,'SIKIŞTIRMA',COL.steel],[360,540,'İŞ',COL.flame],[540,720,'EGZOZ','#b58a6e']];
+  g.font=`600 10px ${DISP}`; g.textBaseline='middle'; g.textAlign='center';
+  for(const [s0,s1,nm,cl] of segs){const on=phi>=s0&&phi<s1; g.fillStyle=hexA(cl,on?0.32:0.1); g.fillRect(fx(s0)+1,y0,fx(s1)-fx(s0)-2,14);
+    g.fillStyle=on?COL.ink:COL.mute; g.fillText(nm,(fx(s0)+fx(s1))/2,y0+7.5);}
+  const bar=(s,e,y,cl)=>{g.fillStyle=cl; if(e>720){g.fillRect(fx(s),y,fx(720)-fx(s),4);g.fillRect(fx(0),y,fx(e-720)-fx(0),4);} else g.fillRect(fx(s),y,fx(e)-fx(s),4);};
+  bar(IVO,IVC_L+720,y0+17,hexA(COL.cyan,0.8)); bar(EVO,EVC,y0+25,hexA('#d9a07a',0.8));
+  if(D){if(sim.ecu.q>0.2) bar(sparkPhi,sparkPhi+pwDeg,y0+33,hexA(COL.violet,0.9));}
+  else {const ijS=mod(650-pwDeg,720); if(pwDeg>0) bar(ijS,ijS<650?650:650+720,y0+33,hexA(COL.violet,0.9));}
+  if(!D){g.fillStyle='#fff'; g.fillRect(fx(sparkPhi)-1,y0+16,2,20);}
+  g.fillStyle=COL.amber; g.beginPath(); g.moveTo(fx(phi),y0+16); g.lineTo(fx(phi)-5,y0+38); g.lineTo(fx(phi)+5,y0+38); g.closePath(); g.fill();
+  g.textAlign='left'; g.textBaseline='middle'; g.font=`8.5px ${MONO}`; g.fillStyle=COL.mute;
+  if(W>420){g.fillText('emme supabı',fx(262),y0+19); g.fillText('egzoz supabı',fx(250),y0+27); g.fillText(D?'doğrudan enjeksiyon →':'port enjeksiyon',fx(D?236:262),y0+35);}
+  // sol alt bilgi
+  g.textAlign='left'; g.textBaseline='alphabetic';
+  g.fillStyle=COL.amber; g.font=`700 ${Math.round(clamp(W/30,14,22))}px ${DISP}`; g.fillText(strokeName(phi),14,H-46);
+  g.fillStyle=COL.mute; g.font=`11px ${MONO}`;
+  g.fillText(`φ ${phi.toFixed(0).padStart(3)}° · krank ${Math.round(mod(th,360))}°${bankName(selCyl)?' · '+bankName(selCyl):''}`,14,H-30);
+  g.fillText(`${inf.fired?'yandı':inf.mis?'TEKLEDİ':'yakıt yok'} · λ ${inf.lam>9?'—':inf.lam.toFixed(2)}${inf.knock?' · VURUNTU':''}`,14,H-15);
+  // sağ: silindir basıncı sütunu
+  const pb=c.p/1e5, pmaxS=Math.max(20,Math.ceil(Math.max(pb,inf.pmax/1e5)/10)*10);
+  const bx=W-28, by0=topBar+14, by1=H-24, hh=by1-by0;
+  g.fillStyle=COL.panel; g.fillRect(bx-7,by0,14,hh); g.strokeStyle=COL.line2; g.strokeRect(bx-7,by0,14,hh);
+  const fh=clamp(pb/pmaxS,0,1)*hh; g.fillStyle=pb>15?COL.flame:COL.cyan; g.fillRect(bx-6,by1-fh,12,fh);
+  g.fillStyle=COL.mute; g.font=`10px ${MONO}`; g.textAlign='right';
+  g.fillText(pmaxS+' bar',bx+12,by0-4); g.fillText(pb.toFixed(1),bx-10,by1-fh+3);
+}
+function drawStrip(){
+  const [g,W,H]=fitCanvas(cvS); g.fillStyle=COL.face; g.fillRect(0,0,W,H);
+  const S=sim, th=strobe?visTheta:S.theta, n=NCYL, cw=W/n, V=ENG.def.layout.startsWith('V');
+  for(let i=0;i<n;i++){const c=S.cyl[i], phi=mod(th-CYL_OFS[i],720), x=i*cw+cw/2, bw=Math.min(cw*0.42,44), top=14, sh=H-44, sel=i===selCyl;
+    const pt=top+pistonX(phi)/ENG.stroke*sh*0.62;
+    if(sel){g.fillStyle=hexA(COL.amber,0.08);g.fillRect(i*cw+2,2,cw-4,H-4);}
+    if(V&&i===n/2){g.strokeStyle=COL.line2;g.beginPath();g.moveTo(i*cw,6);g.lineTo(i*cw,H-6);g.stroke();}
+    g.fillStyle=gasColor(c,phi,1.3); g.fillRect(x-bw/2,top,bw,pt-top);
+    g.fillStyle='#7f8d98'; g.fillRect(x-bw/2+1,pt,bw-2,sh*0.3);
+    g.strokeStyle=sel?COL.amber:COL.line2; g.lineWidth=sel?1.5:1; g.strokeRect(x-bw/2,top,bw,sh*0.62+sh*0.3);
+    g.fillStyle=sel?COL.amber:COL.ink; g.font=`600 ${n>6?10:11}px ${DISP}`; g.textAlign='center'; g.textBaseline='alphabetic';
+    g.fillText(n>6?`${i+1}`:`SİL. ${i+1}`,x,H-18);
+    if(cw>56){g.fillStyle=COL.mute; g.font=`9.5px ${MONO}`; g.fillText(strokeName(phi).split(' ')[0]+' '+Math.round(phi)+'°',x,H-6);}
+    if(c.info.knock&&phi>360&&phi<420){g.fillStyle=COL.crit;g.font=`9px ${MONO}`;g.fillText('VURUNTU',x,top-3);}
+    else if(c.info.mis&&phi>360&&phi<540){g.fillStyle=COL.warn;g.font=`9px ${MONO}`;g.fillText('TEKLEME',x,top-3);}
+  }
+}
+
+/* ---------- Göstergeler (laboratuvar ve sürüş paneli ortak) ---------- */
+function gauge(g,cx,cy,r,v,min,max,o){
+  if(!(r>4)) return;
+  const a0=Math.PI*0.75, a1=Math.PI*2.25, tt=x=>a0+(clamp(x,min,max)-min)/(max-min)*(a1-a0);
+  g.fillStyle=o.face||COL.panel; g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); g.fill(); g.strokeStyle=COL.line2; g.lineWidth=1; g.stroke();
+  if(o.red!=null){g.strokeStyle=COL.crit; g.lineWidth=Math.max(2,r*0.07); g.beginPath(); g.arc(cx,cy,r*0.86,tt(o.red),tt(o.redTo??max)); g.stroke();}
+  if(o.blue!=null){g.strokeStyle=COL.cyan; g.lineWidth=Math.max(2,r*0.07); g.beginPath(); g.arc(cx,cy,r*0.86,tt(min),tt(o.blue)); g.stroke();}
+  if(o.green){g.strokeStyle=COL.ok; g.lineWidth=Math.max(2,r*0.05); g.beginPath(); g.arc(cx,cy,r*0.86,tt(o.green[0]),tt(o.green[1])); g.stroke();}
+  const M=o.major, mi=o.minor||1;
+  for(let q=0;q<=M*mi;q++){const val=min+(max-min)*q/(M*mi), an=tt(val), maj=q%mi===0;
+    g.strokeStyle=maj?COL.ink:COL.dim; g.lineWidth=maj?1.6:1; g.beginPath();
+    g.moveTo(cx+Math.cos(an)*r*(maj?0.74:0.8),cy+Math.sin(an)*r*(maj?0.74:0.8)); g.lineTo(cx+Math.cos(an)*r*0.92,cy+Math.sin(an)*r*0.92); g.stroke();
+    if(maj&&o.fmt&&r>=46){const t=o.fmt(val,q/mi); if(t!==''){g.fillStyle=COL.mute; g.font=`${Math.max(9,r*0.13)}px ${MONO}`; g.textAlign='center'; g.textBaseline='middle';
+      g.fillText(t,cx+Math.cos(an)*r*0.58,cy+Math.sin(an)*r*0.58);}}}
+  g.fillStyle=COL.mute; g.font=`600 ${Math.max(9,r*0.12)}px ${DISP}`; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText(o.label,cx,cy-r*0.32);
+  if(o.digital!=null){g.fillStyle=o.dcol||COL.ink; g.font=`600 ${Math.max(11,r*(o.big?0.24:0.2))}px ${MONO}`; g.fillText(o.digital,cx,cy+r*0.42);
+    if(o.unit&&r>=40){g.fillStyle=COL.dim; g.font=`${Math.max(9,r*0.11)}px ${MONO}`; g.fillText(o.unit,cx,cy+r*0.64);}}
+  const an=tt(v); g.strokeStyle=COL.amber; g.lineWidth=Math.max(2,r*0.035); g.lineCap='round'; g.beginPath();
+  g.moveTo(cx-Math.cos(an)*r*0.12,cy-Math.sin(an)*r*0.12); g.lineTo(cx+Math.cos(an)*r*0.86,cy+Math.sin(an)*r*0.86); g.stroke(); g.lineCap='butt';
+  g.fillStyle=COL.line2; g.beginPath(); g.arc(cx,cy,r*0.07,0,7); g.fill();
+}
+function lamp(g,x,y,w,txt,on,col){g.fillStyle=on?col:COL.panel; g.strokeStyle=on?col:COL.line2; g.lineWidth=1;
+  g.beginPath(); g.roundRect?g.roundRect(x,y,w,18,3):g.rect(x,y,w,18); g.fill(); g.stroke();
+  g.fillStyle=on?COL.bg:COL.dim; g.font=`600 ${Math.min(9.5,(w-4)/(txt.length*0.62)).toFixed(1)}px ${DISP}`; g.textAlign='center'; g.textBaseline='middle'; g.fillText(txt,x+w/2,y+9.5);}
+/* motor/araç ölçekleri (gösterge aralıkları) */
+function scales(){const d=ENG.def, L=ENG.Vd*1000;
+  const tq=Math.ceil(L*(ENG.diesel?175:92)*(1+(ENG.boostMax||0)*0.95)*1.15/50)*50;
+  const kmh=Math.ceil(d.redline/60*2*Math.PI*d.veh.rw/(d.veh.gears[d.veh.gears.length-1]*d.veh.final)*3.6/20)*20;
+  return {tq,kmh:Math.min(Math.max(kmh,160),320)};}
+function lampItems(S){const e=S.ecu; return [['MOTOR',e.dtc.size>0&&(!e.misC.some(x=>x>=6)||blink%0.6<0.3)&&S.key,COL.warn],['YAĞ',S.key&&S.rpm<ENG.idle*0.4,COL.crit],['AKÜ',S.key&&S.rpm<ENG.idle*0.4,COL.crit],
+    ['SICAKLIK',S.ect>110,COL.crit],ENG.diesel?['KIZDIRMA',e.glowT>0,COL.warn]:['VURUNTU',e.kr.some(x=>x>0.5),COL.warn],['LİMİT',e.revCut||e.launchCut,COL.crit],['YAKIT KESİK',e.dfco,COL.cyan],
+    ENG.diesel?['TURBO',S.boost>0.3e5,COL.cyan]:['KAPALI DÖNGÜ',e.cl,COL.ok]];}
+let blink=0;
+const cvG=$('#cvGauge');
+function drawGauges(rdt){
+  const [g,W,H]=fitCanvas(cvG); g.fillStyle=COL.face; g.fillRect(0,0,W,H);
+  if(W<160||H<100) return;
+  const S=sim, e=S.ecu; blink+=rdt;
+  const lampH=26, Hc=H-lampH-6;
+  const R=Math.min(W*0.27,Hc*0.47);
+  const tx=R+12, ty=Hc/2+4;
+  const lim=e.limp?3500:e.set.revLimit, tm=ENG.tachMax, sc=scales();
+  gauge(g,tx,ty,R,S.rpm/1000,0,tm,{label:'DEVİR ×1000',major:tm,minor:tm>10?2:5,fmt:(v,q)=>tm>10&&q%2?'':v.toFixed(0),red:lim/1000,digital:Math.round(S.rpm/10)*10+'',unit:'d/d',big:1,dcol:e.revCut?COL.crit:COL.ink});
+  const gx0=tx+R+12, gw=W-gx0-8, r2=Math.min(gw/4.3,Hc/4.3);
+  const cols=Math.max(2,Math.min(3,Math.floor(gw/(r2*2.2)))), cw=gw/cols;
+  const kpa=S.map/1000, bar=(S.map-P_AMB)/1e5, bm=modOn('turbo')?Math.max(1,Math.ceil((modOn('turbo').p.boost+0.3)*2)/2):0.4;
+  const L=[];
+  L.push(()=>({v:bar,min:-1,max:bm,o:{label:ENG.diesel?'TURBO bar':'MANİFOLD bar',major:Math.round((bm+1)*2),minor:1,fmt:v=>v.toFixed(1),digital:kpa.toFixed(0),unit:'kPa mutlak'}}));
+  L.push(()=>{const lm=S.lamSens; if(ENG.diesel) return {v:lm,min:1,max:5,o:{label:'LAMBDA λ',major:4,minor:2,fmt:v=>v.toFixed(0),red:1,redTo:1.15,digital:lm>19?'HAVA':lm.toFixed(lm>9.95?1:2),unit:lm<1.2?'duman sınırı':'fakir yanma',dcol:lm<1.2?COL.warn:COL.ink}};
+    return {v:lm,min:0.6,max:1.4,o:{label:'LAMBDA λ',major:4,minor:2,fmt:v=>v.toFixed(1),green:[0.97,1.03],digital:S.faults.o2?'0.45 V':lm>3?'HAVA':lm.toFixed(3),unit:'AFR '+(lm>3?'—':(lm*ENG.afr).toFixed(1)),dcol:lm<0.8||lm>1.2?COL.warn:COL.ink}};});
+  L.push(()=>({v:S.ect,min:40,max:130,o:{label:'SU °C',major:3,minor:3,fmt:v=>v.toFixed(0),blue:60,red:112,digital:S.ect.toFixed(0),unit:S.fan?'fan çalışıyor':'',dcol:S.ect>108?COL.crit:COL.ink}}));
+  L.push(()=>{const op=oilP(S);return {v:op,min:0,max:6,o:{label:'YAĞ bar',major:6,minor:1,fmt:v=>v.toFixed(0),red:0,redTo:0.5,digital:op.toFixed(1),unit:'bar'}};});
+  L.push(()=>({v:S.batt,min:8,max:16,o:{label:'AKÜ V',major:4,minor:2,fmt:v=>v.toFixed(0),red:8,redTo:11,digital:S.batt.toFixed(1),unit:'volt'}}));
+  if(S.load==='car') L.push(()=>({v:S.veh.v*3.6,min:0,max:sc.kmh,o:{label:'HIZ km/h',major:sc.kmh/20,minor:1,fmt:(v,q)=>q%2?'':v.toFixed(0),digital:(S.veh.v*3.6).toFixed(0),unit:'vites '+(S.veh.gear||'N')}}));
+  else L.push(()=>{const T=S.load==='dyno'?S.dyno.Tf:Math.max(0,S.Tbrake);return {v:T,min:0,max:sc.tq,o:{label:'TORK Nm',major:5,minor:2,fmt:v=>v.toFixed(0),digital:T.toFixed(0),unit:(T*S.omega/1000*1.36).toFixed(0)+' BG'}};});
+  const rows=Math.ceil(L.length/cols), rh=Hc/rows, rr=Math.min(cw*0.44,rh*0.46);
+  L.forEach((f,ix)=>{const d=f(); const cxg=gx0+cw*(ix%cols)+cw/2, cyg=rh*Math.floor(ix/cols)+rh/2+4; gauge(g,cxg,cyg,rr,d.v,d.min,d.max,d.o);});
+  const items=lampItems(S);
+  const lw=Math.min(84,(W-16)/items.length-4); let lx=8;
+  for(const [t,on,c] of items){lamp(g,lx,H-lampH,lw,t,on,c); lx+=lw+4;}
+}
+function oilP(S){return S.rpm<30?0:Math.min(5.2,0.7+0.95*S.rpm*ENG.s/1000)*(1+0.4*clamp((60-S.oilT)/60,0,1));}
+
+/* ---------- Veri kaydı (osiloskop) ---------- */
+const CH=[
+  {k:'rpm',n:'Devir',u:'d/d',min:0,max:8000,c:COL.amber,on:true,f:S=>S.rpm,fmt:v=>v.toFixed(0)},
+  {k:'map',n:'MAP',u:'kPa',min:0,max:200,c:COL.cyan,on:true,f:S=>S.map/1000,fmt:v=>v.toFixed(0)},
+  {k:'lam',n:'λ',u:'',min:0.6,max:1.4,c:COL.ok,on:true,f:S=>Math.min(S.lamSens,9),fmt:v=>v.toFixed(2)},
+  {k:'adv',n:'Avans',u:'°',min:-10,max:50,c:COL.violet,on:false,f:S=>S.ecu.adv,fmt:v=>v.toFixed(1)},
+  {k:'tps',n:'Gaz',u:'%',min:0,max:100,c:COL.steel,on:true,f:S=>S.tps*100,fmt:v=>v.toFixed(0)},
+  {k:'tq',n:'Anlık tork',u:'Nm',min:-200,max:600,c:COL.flame,on:false,f:S=>S.Tg,fmt:v=>v.toFixed(0)},
+  {k:'trim',n:'STFT+LTFT',u:'%',min:-25,max:25,c:COL.warn,on:false,f:S=>(S.ecu.stft+S.ecu.ltft)*100,fmt:v=>v.toFixed(1)},
+  {k:'ect',n:'Su',u:'°C',min:0,max:130,c:COL.crit,on:false,f:S=>S.ect,fmt:v=>v.toFixed(0)},
+];
+function chScale(){const c=k=>CH.find(x=>x.k===k), sc=scales();
+  c('rpm').max=ENG.tachMax*1000; c('map').max=Math.ceil((100+(ENG.boostMax||0)*100+40)/50)*50;
+  const l=c('lam'); if(ENG.diesel){l.min=0.8;l.max=6;} else {l.min=0.6;l.max=1.4;}
+  const t=c('tq'); t.max=sc.tq*4; t.min=-sc.tq; c('adv').n=ENG.diesel?'Enj. avansı':'Avans';
+  c('trim').n=ENG.diesel?'Yakıt mg':'STFT+LTFT'; c('trim').f=ENG.diesel?(S=>S.ecu.q):(S=>(S.ecu.stft+S.ecu.ltft)*100); c('trim').min=ENG.diesel?0:-25; c('trim').max=ENG.diesel?ENG.def.qMax*1.2:25;
+  $$('#chips .chip').forEach((b,i)=>{b.childNodes[1].textContent=CH[i].n;});}
+const SC_N=600; const scBuf=CH.map(()=>new Float32Array(SC_N)); let scHead=0, scCount=0, scNext=0;
+function scWindow(){return 8*timeScale;}
+function scSample(){const S=sim; if(S.t<scNext) return; scNext=S.t+scWindow()/SC_N;
+  CH.forEach((ch,i)=>scBuf[i][scHead]=ch.f(S)); scHead=(scHead+1)%SC_N; if(scCount<SC_N) scCount++;}
+const chipBox=$('#chips');
+CH.forEach((ch,i)=>{const b=document.createElement('button'); b.className='chip'+(ch.on?' on':''); b.type='button';
+  b.innerHTML=`<i style="background:${ch.c}"></i>${ch.n}<b id="cv_${ch.k}">–</b>`; b.onclick=()=>{ch.on=!ch.on;b.classList.toggle('on',ch.on);}; chipBox.appendChild(b);});
+const cvSc=$('#cvScope');
+function drawScope(){
+  const [g,W,H]=fitCanvas(cvSc); g.fillStyle=COL.face; g.fillRect(0,0,W,H);
+  const pl=8,pr=8,pt=8,pb=18, w=W-pl-pr, h=H-pt-pb;
+  g.strokeStyle=COL.line; g.lineWidth=1; g.beginPath();
+  for(let q=0;q<=10;q++){const x=pl+w*q/10+0.5;g.moveTo(x,pt);g.lineTo(x,pt+h);} for(let q=0;q<=4;q++){const y=pt+h*q/4+0.5;g.moveTo(pl,y);g.lineTo(pl+w,y);} g.stroke();
+  g.fillStyle=COL.dim; g.font=`10px ${MONO}`; g.textAlign='left'; g.textBaseline='alphabetic';
+  const win=scWindow(); g.fillText(`−${win>=1?win.toFixed(0)+' s':(win*1000).toFixed(0)+' ms'}`,pl+2,H-5); g.textAlign='right'; g.fillText('şimdi',W-pr,H-5);
+  CH.forEach((ch,ci)=>{ if(!ch.on||scCount<2) return; const b=scBuf[ci];
+    g.strokeStyle=ch.c; g.lineWidth=1.4; g.beginPath();
+    for(let q=0;q<scCount;q++){const ix=(scHead-scCount+q+SC_N)%SC_N; const x=pl+w*(q+SC_N-scCount)/(SC_N-1); const y=pt+h*(1-clamp((b[ix]-ch.min)/(ch.max-ch.min),0,1)); q?g.lineTo(x,y):g.moveTo(x,y);} g.stroke();
+    const last=b[(scHead-1+SC_N)%SC_N], y=pt+h*(1-clamp((last-ch.min)/(ch.max-ch.min),0,1));
+    g.fillStyle=ch.c; g.beginPath(); g.arc(pl+w,y,3,0,7); g.fill();
+  });
+}
+
+/* ---------- Silindir basınç grafiği ---------- */
+const cvC=$('#cvCyl'); const motTr=new Float64Array(TR_N);
+function updateMotored(){const S=sim,c=S.cyl[selCyl]; const rpm=Math.max(S.rpm,200);
+  cycleTrace({pBDC:c.tr[0],mAir:1e-4,mFuel:0,lam:1,adv:0,rpm,kpa:S.map/1000,ect:S.ect,fire:false},motTr);}
+function drawCyl(){
+  const [g,W,H]=fitCanvas(cvC); g.fillStyle=COL.face; g.fillRect(0,0,W,H);
+  const S=sim, c=S.cyl[selCyl], inf=c.info;
+  const pl=44,pr=10,pt=10,pb=26, w=W-pl-pr, h=H-pt-pb;
+  g.font=`10px ${MONO}`; g.textBaseline='middle';
+  if(pvMode==='pt'){
+    let pm=0; for(let k=0;k<TR_N;k++) pm=Math.max(pm,c.tr[k]); for(const hb of c.hist) for(let k=0;k<TR_N;k+=4) pm=Math.max(pm,hb[k]);
+    const ymax=Math.max(20,Math.ceil(pm/1e5/10)*10), X=d=>pl+w*(d+180)/360, Y=p=>pt+h*(1-p/1e5/ymax);
+    const st=ymax>120?40:ymax>40?20:10;
+    g.strokeStyle=COL.line; g.beginPath(); for(let d=-180;d<=180;d+=30){g.moveTo(X(d)+0.5,pt);g.lineTo(X(d)+0.5,pt+h);} for(let p=0;p<=ymax;p+=st){g.moveTo(pl,Y(p*1e5)+0.5);g.lineTo(pl+w,Y(p*1e5)+0.5);} g.stroke();
+    g.fillStyle=COL.mute; g.textAlign='right'; for(let p=0;p<=ymax;p+=st) g.fillText(p,pl-6,Y(p*1e5));
+    g.textAlign='center'; for(let d=-180;d<=180;d+=60) g.fillText(d===0?'ÜÖN':d+'°',X(d),H-12);
+    g.save(); g.translate(11,pt+h/2); g.rotate(-Math.PI/2); g.fillText('basınç · bar',0,0); g.restore();
+    g.strokeStyle=COL.steel; g.setLineDash([4,4]); g.lineWidth=1; g.beginPath(); for(let k=0;k<TR_N;k+=2){const x=X(k*TR_RES-180),y=Y(motTr[k]); k?g.lineTo(x,y):g.moveTo(x,y);} g.stroke(); g.setLineDash([]);
+    for(let q=1;q<HIST;q++){const hb=c.hist[(c.hi-q+1+HIST*2)%HIST]; g.strokeStyle=hexA(COL.flame,0.13); g.beginPath(); for(let k=0;k<TR_N;k+=2){const x=X(k*TR_RES-180),y=Y(hb[k]); k?g.lineTo(x,y):g.moveTo(x,y);} g.stroke();}
+    g.strokeStyle=COL.flame; g.lineWidth=1.8; g.beginPath(); for(let k=0;k<TR_N;k++){const x=X(k*TR_RES-180),y=Y(c.tr[k]); k?g.lineTo(x,y):g.moveTo(x,y);} g.stroke();
+    g.strokeStyle='#fff'; g.lineWidth=1; g.beginPath(); g.moveTo(X(-inf.adv),pt); g.lineTo(X(-inf.adv),pt+h); g.stroke();
+    g.fillStyle=COL.ink; g.textAlign='left'; g.fillText(ENG.diesel?'enjeksiyon':'kıvılcım',X(-inf.adv)+3,pt+8);
+    if(inf.fired){g.fillStyle=COL.amber; g.beginPath(); g.arc(X(inf.thP),Y(inf.pmax),3.5,0,7); g.fill();}
+    const phi=mod((strobe?visTheta:S.theta)-CYL_OFS[selCyl],720);
+    if(phi>=180&&phi<=540){g.fillStyle=COL.cyan; g.beginPath(); g.arc(X(phi-360),Y(c.p),4,0,7); g.fill();}
+    g.fillStyle=COL.steel; g.textAlign='right'; g.fillText('kesik: yanmasız (motorlu) iz',pl+w-4,pt+8);
+  } else {
+    const Vmin=ENG.Vc*0.9, Vmax=(ENG.Vc+ENG.Vdc)*1.05, pmin=0.1, pmaxL=ENG.diesel?300:100;
+    const X=V=>pl+w*Math.log(V/Vmin)/Math.log(Vmax/Vmin), Y=p=>pt+h*(1-Math.log(Math.max(p/1e5,pmin)/pmin)/Math.log(pmaxL/pmin));
+    const ticks=[0.1,0.3,1,3,10,30,100].concat(ENG.diesel?[300]:[]);
+    g.strokeStyle=COL.line; g.beginPath(); for(const p of ticks){g.moveTo(pl,Y(p*1e5)+0.5);g.lineTo(pl+w,Y(p*1e5)+0.5);} g.stroke();
+    g.fillStyle=COL.mute; g.textAlign='right'; for(const p of ticks) g.fillText(p,pl-6,Y(p*1e5));
+    g.textAlign='center'; g.fillText('hacim (log) · ÜÖN ← → AÖN',pl+w/2,H-12);
+    const loop=(tr,col,lw)=>{g.strokeStyle=col; g.lineWidth=lw; g.beginPath();
+      for(let k=0;k<TR_N;k+=2){const x=X(TR_V[k]),y=Y(tr[k]); k?g.lineTo(x,y):g.moveTo(x,y);}
+      for(let ph=540;ph<=720;ph+=4){const p=S.pexh+(tr[TR_N-1]-S.pexh)*Math.exp(-(ph-540)/14); g.lineTo(X(cylVol(ph)),Y(p));}
+      for(let ph=0;ph<=180;ph+=4){g.lineTo(X(cylVol(ph)),Y(S.map));} g.lineTo(X(TR_V[0]),Y(tr[0])); g.stroke();};
+    for(let q=1;q<HIST;q++) loop(c.hist[(c.hi-q+1+HIST*2)%HIST],hexA(COL.flame,0.13),1);
+    loop(c.tr,COL.flame,1.8);
+    g.fillStyle=COL.steel; g.textAlign='right'; g.fillText('üst döngü = iş, alt döngü = pompalama kaybı',pl+w-4,pt+8);
+  }
+  g.textAlign='left';
+}
+function updCylStats(){const c=sim.cyl[selCyl],i=c.info; const imepN=(i.W-(sim.pexh-sim.map)*ENG.Vdc)/ENG.Vdc;
+  const cells=[['Pmax',(i.pmax/1e5).toFixed(1)+' bar'],['θ@Pmax',i.fired?i.thP.toFixed(1)+'°':'—'],['MFB50',i.fired&&i.mfb50===i.mfb50?i.mfb50.toFixed(1)+'°':'—'],
+    ['IMEP net',(imepN/1e5).toFixed(2)+' bar'],[ENG.diesel?'Enj. avansı':'Avans',i.adv.toFixed(1)+'°'],['λ',i.lam>9?'—':i.lam.toFixed(3)],['Yanma',i.dur.toFixed(0)+'° KA'],['Durum',i.knock?'VURUNTU':i.fired?'normal':i.mis?'tekleme':'yakıt yok']];
+  $('#cylStats').innerHTML=cells.map(([a,b])=>`<div><span>${a}</span><b>${b}</b></div>`).join('');}
+
+/* ---------- Dinamometre grafiği ---------- */
+const cvD=$('#cvDyno'), RUNCOL=[COL.amber,COL.cyan,COL.violet,COL.ok];
+function drawDyno(){
+  const [g,W,H]=fitCanvas(cvD); g.fillStyle=COL.face; g.fillRect(0,0,W,H);
+  const d=sim.dyno, runs=d.runs.slice(); if(d.sweep&&d.sweep.data.length) runs.push(d.sweep.data);
+  const pl=46,pr=50,pt=14,pb=28,w=W-pl-pr,h=H-pt-pb;
+  let tmax=100,pmax=50; for(const r of runs) for(const [n,T] of r){tmax=Math.max(tmax,T);pmax=Math.max(pmax,T*n*Math.PI/30/1000*1.36);}
+  tmax=Math.ceil(tmax/50)*50; pmax=Math.ceil(pmax/50)*50;
+  const xm=ENG.tachMax*1000, xs=xm>10000?2000:1000;
+  const X=n=>pl+w*n/xm, YT=T=>pt+h*(1-T/tmax), YP=P=>pt+h*(1-P/pmax);
+  g.strokeStyle=COL.line; g.beginPath(); for(let n=0;n<=xm;n+=xs){g.moveTo(X(n)+0.5,pt);g.lineTo(X(n)+0.5,pt+h);} for(let q=0;q<=5;q++){const y=pt+h*q/5+0.5;g.moveTo(pl,y);g.lineTo(pl+w,y);} g.stroke();
+  g.font=`10px ${MONO}`; g.fillStyle=COL.mute; g.textBaseline='middle';
+  g.textAlign='center'; for(let n=0;n<=xm;n+=xs) g.fillText(n,X(n),H-14);
+  g.textAlign='right'; for(let q=0;q<=5;q++) g.fillText((tmax*(5-q)/5).toFixed(0),pl-6,pt+h*q/5);
+  g.textAlign='left'; for(let q=0;q<=5;q++) g.fillText((pmax*(5-q)/5).toFixed(0),pl+w+6,pt+h*q/5);
+  g.fillText('— tork Nm',pl+4,pt+6); g.textAlign='right'; g.fillText('güç BG (PS) - - -',pl+w-4,pt+6);
+  if(!runs.length){g.textAlign='center'; g.fillStyle=COL.mute; g.font=`13px ${MONO}`; g.fillText('Henüz çekiş yok. “Tam gaz çekiş başlat” ile ilk eğriyi alın.',pl+w/2,pt+h/2); return;}
+  const info=[];
+  runs.forEach((r,ri)=>{const col=RUNCOL[ri%4]; if(r.length<2) return;
+    g.strokeStyle=col; g.lineWidth=2; g.setLineDash([]); g.beginPath(); r.forEach(([n,T],q)=>q?g.lineTo(X(n),YT(T)):g.moveTo(X(n),YT(T))); g.stroke();
+    g.setLineDash([5,4]); g.beginPath(); r.forEach(([n,T],q)=>{const P=T*n*Math.PI/30/1000*1.36; q?g.lineTo(X(n),YP(P)):g.moveTo(X(n),YP(P));}); g.stroke(); g.setLineDash([]);
+    let bt=r[0],bp=r[0],bpv=0; for(const s of r){if(s[1]>bt[1])bt=s; const P=s[1]*s[0]*Math.PI/30/1000*1.36; if(P>bpv){bpv=P;bp=s;}}
+    info.push(`<span style="color:${col}">●</span> ${bt[1].toFixed(0)} Nm @ ${Math.round(bt[0]/50)*50} · ${bpv.toFixed(0)} BG @ ${Math.round(bp[0]/50)*50}`);
+  });
+  $('#dynoInfo').innerHTML=info.join(' &nbsp; ');
+}
+
+/* ---------- ECU sekmeleri ---------- */
+$$('#tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.t));
+let curTab='live';
+function showTab(t){curTab=t; $$('#tabs button').forEach(x=>x.classList.toggle('act',x.dataset.t===t)); $$('#v-lab .pane').forEach(p=>p.hidden=p.id!=='t-'+t);
+  if(t==='ve'||t==='ign') paintTable(t);}
+const ROWS_COMMON=[
+  ['Devir','rpm',S=>S.rpm.toFixed(0)+' d/d'],['MAP','map',S=>(S.mapSens/1000).toFixed(1)+' kPa'],['Pedal / TPS','tps',S=>(S.tps*100).toFixed(1)+' %'],
+  ['Emme havası (IAT)','iat',S=>(S.Tman-273.15).toFixed(1)+' °C'],['Soğutma suyu (ECT)','ect',S=>S.ect.toFixed(1)+' °C'],['Yağ sıcaklığı','oil',S=>S.oilT.toFixed(1)+' °C'],
+];
+const ROWS_PETROL=[
+  ['λ hedef','lt',S=>S.ecu.lamT.toFixed(3)],['λ ölçülen','lm',S=>S.faults.o2?'0.450 V sabit':S.lamSens>3?'hava':S.lamSens.toFixed(3),S=>Math.abs(S.lamSens-S.ecu.lamT)>0.06?'y':''],
+  ['Kısa dönem düzeltme (STFT)','stft',S=>(S.ecu.stft*100).toFixed(1)+' %',S=>Math.abs(S.ecu.stft)>0.12?'y':''],['Uzun dönem düzeltme (LTFT)','ltft',S=>(S.ecu.ltft*100).toFixed(1)+' %',S=>Math.abs(S.ecu.ltft)>0.15?'y':''],
+  ['Döngü','cl',S=>S.ecu.cl?'KAPALI':'açık',S=>S.ecu.cl?'g':''],['Enjeksiyon süresi','pw',S=>S.ecu.pw.toFixed(2)+' ms'],
+  ['Enjektör doluluk','duty',S=>(S.ecu.duty*100).toFixed(0)+' %',S=>S.ecu.duty>0.9?'r':S.ecu.duty>0.8?'y':''],['Ateşleme avansı','adv',S=>S.ecu.adv.toFixed(1)+' °'],
+  ['Vuruntu geri çekme','kr',S=>S.ecu.kr.map(x=>x.toFixed(1)).join(' · ')+' °',S=>S.ecu.kr.some(x=>x>0.5)?'y':''],['Vuruntu olayları','kc',S=>S.ecu.knockCount],
+  ['Rölanti hedefi','it',S=>S.ecu.idleTgt.toFixed(0)+' d/d'],['Rölanti valfi (IAC)','iac',S=>(S.ecu.iac*100).toFixed(0)+' %'],
+  ['Yakıt rampası','fp',S=>(S.fuelP/1e5).toFixed(2)+' bar',S=>S.fuelP<2.5e5&&S.ecuOn?'r':''],
+];
+const ROWS_DIESEL=[
+  ['λ ölçülen','lm',S=>S.lamSens>19?'hava':S.lamSens.toFixed(2),S=>S.lamSens<1.2?'y':''],['Enjeksiyon miktarı','q',S=>S.ecu.q.toFixed(1)+' mg/strok'],
+  ['Rölanti regülatörü','qi',S=>S.ecu.qIdle.toFixed(1)+' mg'],['Duman sınırı λ','sl',S=>S.ecu.set.smokeLam.toFixed(2)],
+  ['Enjeksiyon avansı','adv',S=>S.ecu.adv.toFixed(1)+' ° öÜÖN'],['Kızdırma','gl',S=>S.ecu.glowT>0?'ISINIYOR '+S.ecu.glowT.toFixed(1)+' s':'hazır',S=>S.ecu.glowT>0?'y':'g'],
+  ['Rölanti hedefi','it',S=>S.ecu.idleTgt.toFixed(0)+' d/d'],['Common rail basıncı','fp',S=>(S.fuelP/1e5).toFixed(0)+' bar',S=>S.fuelP<0.8*(S.railT||3e7)&&S.ecuOn?'r':''],
+];
+const ROWS_TAIL=[
+  ['Akü gerilimi','vb',S=>S.batt.toFixed(2)+' V'],['Hava debisi','maf',S=>(S.mdotTh*1000).toFixed(2)+' g/s'],
+  ['Yakıt tüketimi','ff',S=>S.load==='car'&&S.veh.v>2?(S.fuelFlow/ENG.rhoF/S.veh.v*1e5).toFixed(1)+' L/100 km':(S.fuelFlow/ENG.rhoF*3600).toFixed(2)+' L/h'],
+  ['Egzoz gazı (EGT)','egt',S=>(S.egt-273).toFixed(0)+' °C',S=>S.egt>1220?'r':''],['Motor torku (fren)','tb',S=>(S.load==='dyno'?S.dyno.Tf:S.Tbrake).toFixed(1)+' Nm'],
+  ['Turbo basıncı','bst',S=>modOn('turbo')?(S.boost/1e5).toFixed(2)+' bar':'takılı değil'],
+  ['Koruma modu','limp',S=>S.ecu.limp?'ETKİN (3500 d/d)':'yok',S=>S.ecu.limp?'r':''],
+];
+let liveRows=[];
+function buildLive(){liveRows=ROWS_COMMON.concat(ENG.diesel?ROWS_DIESEL:ROWS_PETROL,ROWS_TAIL);
+  $('#liveGrid').innerHTML=liveRows.map(r=>`<div><span>${r[0]}</span><b id="lv_${r[1]}">–</b></div>`).join('');}
+function updLive(){const S=sim; for(const r of liveRows){const el=document.getElementById('lv_'+r[1]); if(!el) continue; el.textContent=r[2](S); el.className=r[3]?r[3](S):'';}}
+
+/* harita tabloları (eksenler tablonun içinde) */
+let selCell={ve:null,ign:null};
+function heat(v,lo,hi){const t=clamp((v-lo)/(hi-lo),0,1); const stops=[[0,'#3b6fb6'],[0.35,'#45c1db'],[0.6,'#9be07a'],[0.8,'#f3c544'],[1,'#ff6a2b']];
+  for(let q=1;q<stops.length;q++) if(t<=stops[q][0]){const [a,ca]=stops[q-1],[b,cb]=stops[q]; return mixHex(ca,cb,(t-a)/(b-a));} return stops[4][1];}
+function tabOf(kind){return kind==='ve'?sim.ecu.ve:sim.ecu.ign;}
+function tabMeta(kind){if(ENG.diesel) return kind==='ve'?{corner:'pedal % \\ d/d',lo:0,hi:ENG.def.qMax,u:' mg',y:'pedal %',yAt:S=>S.tps*100}:{corner:'mg \\ d/d',lo:0,hi:25,u:'°',y:'mg',yAt:S=>S.ecu.q};
+  return kind==='ve'?{corner:'kPa \\ d/d',lo:40,hi:105,u:' %',y:'kPa',yAt:S=>S.mapSens/1000}:{corner:'kPa \\ d/d',lo:0,hi:45,u:'°',y:'kPa',yAt:S=>S.mapSens/1000};}
+function buildTable(kind){const tb=kind==='ve'?$('#tblVe'):$('#tblIg'), T=tabOf(kind), m=tabMeta(kind), NR=T.x.length, NM=T.y.length;
+  let h=`<thead><tr><th>${m.corner}</th>`+T.x.map(r=>`<th>${r}</th>`).join('')+'</tr></thead><tbody>';
+  for(let j=NM-1;j>=0;j--){h+=`<tr><th>${T.y[j]}</th>`; for(let i=0;i<NR;i++) h+=`<td data-c="${j*NR+i}"></td>`; h+='</tr>';}
+  tb.innerHTML=h+'</tbody>'; tb.tabIndex=0;
+  tb.onclick=ev=>{const td=ev.target.closest('td'); if(!td) return; selCell[kind]=+td.dataset.c; paintTable(kind);};
+  tb.onkeydown=ev=>{const T=tabOf(kind), NR=T.x.length, NM=T.y.length;
+    if(ev.key==='+'||ev.key==='='){adjCell(kind,1);ev.preventDefault();} else if(ev.key==='-'){adjCell(kind,-1);ev.preventDefault();}
+    else if(selCell[kind]!=null&&ev.key.startsWith('Arrow')){let c=selCell[kind],i=c%NR,j=(c/NR)|0; if(ev.key==='ArrowLeft')i=Math.max(0,i-1); if(ev.key==='ArrowRight')i=Math.min(NR-1,i+1);
+      if(ev.key==='ArrowUp')j=Math.min(NM-1,j+1); if(ev.key==='ArrowDown')j=Math.max(0,j-1); selCell[kind]=j*NR+i; paintTable(kind); ev.preventDefault();}};}
+function paintTable(kind){const tb=kind==='ve'?$('#tblVe'):$('#tblIg'), T=tabOf(kind), m=tabMeta(kind), NR=T.x.length;
+  tb.querySelectorAll('td').forEach(td=>{const c=+td.dataset.c, v=T.d[c]; td.textContent=v.toFixed(1); td.style.background=heat(v,m.lo,m.hi); td.classList.toggle('sel',c===selCell[kind]);});
+  const sc=selCell[kind], el=kind==='ve'?$('#veSel'):$('#igSel');
+  if(sc!=null) el.textContent=`Seçili: ${T.x[sc%NR]} d/d · ${T.y[(sc/NR)|0]} ${m.y} = ${T.d[sc].toFixed(1)}${m.u}`; else el.textContent='Hücre seçin, sonra + / − veya düğmeler';
+  markOp();}
+function markOp(){const kind=curTab==='ve'?'ve':curTab==='ign'?'ign':null; if(!kind) return; const tb=kind==='ve'?$('#tblVe'):$('#tblIg');
+  tb.querySelectorAll('td.op').forEach(td=>td.classList.remove('op'));
+  if(sim.rpm<100) return;
+  for(const [c,w] of cellWeights(tabOf(kind),sim.rpm,tabMeta(kind).yAt(sim))) if(w>0.12){const td=tb.querySelector(`td[data-c="${c}"]`); td&&td.classList.add('op');}}
+function adjCell(kind,d){const c=selCell[kind]; if(c==null) return; const T=tabOf(kind);
+  if(kind==='ve') T.d[c]=ENG.diesel?clamp(T.d[c]+d*0.5,0,120):clamp(T.d[c]*(1+d/100),5,130); else T.d[c]=clamp(T.d[c]+d,-10,50); paintTable(kind);}
+$$('[data-ve]').forEach(b=>b.onclick=()=>adjCell('ve',+b.dataset.ve));
+$$('[data-ig]').forEach(b=>b.onclick=()=>adjCell('ign',+b.dataset.ig));
+$('#bVeReset').onclick=()=>{sim.ecu.ve=factoryVE(); sim.ecu.ltft=0; paintTable('ve');};
+$('#bIgReset').onclick=()=>{sim.ecu.ign=factoryIgn(); paintTable('ign');};
+$('#chkAuto').onchange=e=>{sim.ecu.set.autotune=e.target.checked; if(e.target.checked){sim.ecu.ltft=0;}};
+function labelTabs(){const D=ENG.diesel;
+  $('#tabs [data-t="ve"]').textContent=D?'Yakıt miktarı haritası':'VE haritası';
+  $('#tabs [data-t="ign"]').textContent=D?'Enjeksiyon avansı':'Ateşleme haritası';
+  $('#veNote').textContent=D?'Pedal konumuna göre istenen yakıt miktarı (mg/strok): satırlar pedal %, sütunlar devir. Dizelde gaz kelebeği yoktur; torku doğrudan bu tablo belirler. ECU bunu duman sınırıyla (hava miktarı) ve devir regülatörüyle kırpar. Beyaz çerçeve şu anki çalışma noktası.'
+    :'Hacimsel verim (%) tablosu: satırlar emme manifoldu basıncı (kPa), sütunlar devir. ECU havayı bu tablodan tahmin eder, gerçek motor kendi VE\'sine göre hava çeker. Fark λ hatası olarak görünür ve kapalı döngü bunu düzeltmeye çalışır. Beyaz çerçeve şu anki çalışma noktası.';
+  $('#ignNote').textContent=D?'Enjeksiyon başlangıcı (° ÜÖN öncesi): satırlar yakıt miktarı (mg), sütunlar devir. Fabrika haritası en yüksek tork için hesaplanır, tepe basınç 185 bar altında tutulur. Erken enjeksiyon daha sert, gürültülü yanma ve yüksek basınç demektir.'
+    :'Ateşleme avansı (° ÜÖN öncesi). Fabrika haritası açılışta motor modelinden hesaplanır: her hücre için en iyi tork avansı (MBT) bulunur, vuruntu sınırının altında tutulur. Avans eklerseniz önce tork artar, sonra vuruntu başlar ve basınç eğrisinde titreşim görürsünüz.';
+  $('#autoWrap').hidden=D;
+  $('#veBtns').innerHTML=D?'<button class="btn small" data-ve="-1">−0.5 mg</button><button class="btn small" data-ve="1">+0.5 mg</button><button class="btn small" data-ve="-4">−2 mg</button><button class="btn small" data-ve="4">+2 mg</button>'
+    :'<button class="btn small" data-ve="-1">−1 %</button><button class="btn small" data-ve="1">+1 %</button><button class="btn small" data-ve="-5">−5 %</button><button class="btn small" data-ve="5">+5 %</button>';
+  $$('[data-ve]').forEach(b=>b.onclick=()=>adjCell('ve',+b.dataset.ve));
+}
+
+/* ayarlar */
+function buildSettings(){const D=ENG.diesel, d=ENG.def, base=ENG.injCc;
+  const SETS=[
+    {k:'revLimit',l:'Devir limiti',min:round50(d.redline*0.6),max:round50(d.redline*1.12),step:100,u:'d/d'},
+    {k:'idleTarget',l:'Rölanti devri (sıcak)',min:round50(d.idle*0.7),max:round50(d.idle*1.7),step:25,u:'d/d'},
+    !D&&{k:'lamWOT',l:'Tam gaz λ hedefi',min:0.75,max:1.0,step:0.01,u:''},
+    D&&{k:'smokeLam',l:'Duman sınırı λ (düşük = daha çok yakıt, kara duman)',min:1.0,max:1.5,step:0.01,u:''},
+    {k:'advOffset',l:D?'Global enjeksiyon avansı ofseti':'Global avans ofseti',min:-10,max:10,step:0.5,u:'°'},
+    !D&&{k:'injCc',l:'Enjektör debisi',sel:[[Math.round(base*0.75/10)*10,'küçük'],[base,base+' cc/dk (stok)'],[Math.round(base*1.35/10)*10,'büyük'],[Math.round(base*1.8/10)*10,'yarış']].map(([a,b])=>[a,b==='küçük'||b==='büyük'||b==='yarış'?`${a} cc/dk (${b})`:b])},
+    !D&&{k:'octane',l:'Yakıt oktanı (RON)',sel:[[91,'91 (düşük)'],[95,'95'],[98,'98']]},
+    !D&&{k:'closedLoop',l:'Kapalı döngü λ kontrolü',b:1},!D&&{k:'knockCtl',l:'Vuruntu kontrolü',b:1},!D&&{k:'dfco',l:'Yavaşlamada yakıt kesme',b:1},!D&&{k:'transComp',l:'Geçici yakıt (duvar filmi) telafisi',b:1},
+  ].filter(Boolean);
+  $('#setForm').innerHTML=SETS.map(s=>{const v=sim.ecu.set[s.k];
+    if(s.b) return `<label class="check"><input type="checkbox" id="s_${s.k}" ${v?'checked':''}><span><b>${s.l}</b></span></label>`;
+    if(s.sel) return `<div class="f"><label for="s_${s.k}">${s.l}</label><select id="s_${s.k}">${s.sel.map(([a,b])=>`<option value="${a}" ${a==v?'selected':''}>${b}</option>`).join('')}</select></div>`;
+    return `<div class="f"><label for="s_${s.k}">${s.l}<b id="sv_${s.k}">${v} ${s.u}</b></label><input type="range" id="s_${s.k}" min="${s.min}" max="${s.max}" step="${s.step}" value="${v}"></div>`;}).join('')
+    +(D?'':`<div class="f"><span class="note">Enjektör debisini değiştirince VE haritası aynı kalır, ECU yeni debiyle hesaplar. Atmosferik motora turbo takıp stok enjektörle yüksek devre çıkın: doluluk %97'ye dayanınca karışım fakirleşir.</span></div>`);
+  SETS.forEach(s=>{const el=$('#s_'+s.k); el.oninput=el.onchange=()=>{const v=s.b?el.checked:+el.value; sim.ecu.set[s.k]=v; if(!s.b&&!s.sel) $('#sv_'+s.k).textContent=v+' '+s.u;};});
+}
+/* arızalar */
+$('#faultList').innerHTML=FAULTS.map(f=>`<label class="check"><input type="checkbox" id="f_${f.id}"><span><b>${f.name}</b><small>${f.desc}</small></span></label>`).join('');
+FAULTS.forEach(f=>$('#f_'+f.id).onchange=e=>{sim.faults[f.id]=e.target.checked; if(f.id==='o2'&&!e.target.checked){sim.ecu.o2fault=false;sim.ecu.timers.o2=0;}});
+function syncFaults(){FAULTS.forEach(f=>{$('#f_'+f.id).checked=!!sim.faults[f.id];});}
+/* DTC */
+function renderDtc(){const e=sim.ecu, l=[...e.dtc].sort();
+  $('#dtcList').innerHTML=l.length?l.map(c=>`<div class="dtc"><code>${c}</code><span>${DTC_DEF[c]||''}</span></div>`).join(''):'<div class="empty">Kayıtlı arıza kodu yok. MIL lambası sönük.</div>';
+  const b=$('#dtcBadge'); b.hidden=!l.length; b.textContent=l.length;}
+function clearDtc(){const e=sim.ecu; e.dtc.clear(); e.misC.fill(0); e.cycC.fill(0); e.timers={}; e.o2fault=false; renderDtc();}
+$('#bClearDtc').onclick=clearDtc;
+/* modüller */
+function renderMods(){$('#modList').innerHTML=MODULES.map(m=>`<div class="mod"><h3>${m.name}<label class="toggle"><input type="checkbox" id="m_${m.id}" ${m.on?'checked':''}> takılı</label></h3><p>${m.desc}</p>
+  ${(m.params||[]).map(q=>`<div class="f"><label for="mp_${m.id}_${q.k}">${q.label}<b id="mpv_${m.id}_${q.k}">${m.p[q.k]} ${q.unit||''}</b></label><input type="range" id="mp_${m.id}_${q.k}" min="${q.min}" max="${q.max}" step="${q.step}" value="${m.p[q.k]}"></div>`).join('')}
+  <span class="hint" id="ms_${m.id}"></span></div>`).join('');
+  MODULES.forEach(m=>{$('#m_'+m.id).onchange=e=>{m.on=e.target.checked; if(m.on&&m.init) m.init(sim,m); if(!m.on){sim.turboSpd=0;}};
+    (m.params||[]).forEach(q=>{const el=$(`#mp_${m.id}_${q.k}`); el.oninput=()=>{m.p[q.k]=+el.value; $(`#mpv_${m.id}_${q.k}`).textContent=el.value+' '+(q.unit||'');};});});}
+
+/* ---------- Kontroller ---------- */
+$$('.bKey').forEach(b=>b.onclick=()=>{auInit(); setKey(!sim.key);});
+$$('.bStart').forEach(b=>holdButton(b,startOn,startOff));
+const rP=$('#rPedal'); rP.oninput=()=>{$('#oPedal').textContent=rP.value+' %';};
+function seg(id,fn){const el=$(id); el.onclick=ev=>{const b=ev.target.closest('button'); if(!b||!el.contains(b)) return; el.querySelectorAll('button').forEach(x=>x.classList.toggle('act',x===b)); fn(b.dataset.v);};}
+function segSet(id,v){$(id).querySelectorAll('button').forEach(x=>x.classList.toggle('act',x.dataset.v==String(v)));}
+seg('#segCyl',v=>selectCyl(+v));
+function selectCyl(i){selCyl=clamp(i,0,NCYL-1); segSet('#segCyl',selCyl); const b=bankName(selCyl); $('#hCyl').textContent=$('#hCyl2').textContent='Silindir '+(selCyl+1)+(b?' · '+b:''); updateMotored();}
+seg('#segPV',v=>pvMode=v);
+seg('#segLoad',v=>setLoad(v));
+function setLoad(v){const S=sim; if(S.dyno.sweep){S.dyno.sweep=null;S.pedalOverride=null;}
+  S.load=v; segSet('#segLoad',v); $('#ctlDyno').hidden=v!=='dyno'; $('#ctlCar').hidden=v!=='car';
+  if(v==='dyno'){S.dyno.target=Math.max(1000,round50(S.rpm)); dynoSlider(); S.dyno.I=0;}
+  if(v==='car'){S.veh.v=0; setGear(0);} }
+const TSCALES=[1,0.25,0.05,0.01];
+seg('#segTime',v=>setScale(+v));
+function setScale(v){timeScale=v; segSet('#segTime',v); const w=scWindow(); $('#hWin').textContent=w>=1?w.toFixed(0)+' s':(w*1000).toFixed(0)+' ms'; scCount=0; scNext=0;}
+$('#chkStrobe').onchange=e=>{strobe=e.target.checked; visTheta=sim.theta;};
+seg('#segDyno',v=>{sim.dyno.ctl=v; dynoSlider();});
+function dynoSlider(){const r=$('#rDyno'), d=sim.dyno;
+  if(d.ctl==='speed'){r.min=round50(ENG.idle*1.2);r.max=ENG.redline;r.step=50;r.value=d.target;} else {r.min=0;r.max=scales().tq;r.step=5;r.value=d.torque;} updDynoLabel();}
+$('#rDyno').oninput=()=>{const v=+$('#rDyno').value; if(sim.dyno.ctl==='speed') sim.dyno.target=v; else sim.dyno.torque=v; updDynoLabel();};
+function updDynoLabel(){$('#oDyno').textContent=sim.dyno.ctl==='speed'?sim.dyno.target+' d/d':sim.dyno.torque+' Nm';}
+function startSweep(){auInit(); if(sim.load!=='dyno') setLoad('dyno'); if(sim.rpm<ENG.idle*0.5){flash('Önce motoru çalıştırın.');return;}
+  segSet('#segDyno','speed'); sim.dyno.ctl='speed'; dynoSlider();
+  sim.dyno.sweep={phase:'prep',t:0,data:[],ret:ENG.def.sweep[0]}; showTab('dyno');}
+$('#bSweep').onclick=startSweep; $('#bSweep2').onclick=startSweep;
+$('#bDynoClear').onclick=()=>{sim.dyno.runs=[]; $('#dynoInfo').textContent='Çekişler temizlendi.';};
+seg('#segGear',v=>setGear(+v));
+function setGear(g){sim.veh.gear=g; segSet('#segGear',g);}
+$('#rClutch').oninput=()=>{$('#oClutch').textContent=$('#rClutch').value+' %';};
+$$('.bSound').forEach(b=>b.onclick=()=>{auInit(); setSound(!soundOn);});
+$('#rVol').oninput=()=>{if(AU.master&&soundOn) AU.master.gain.value=volume()*0.9;};
+cvS.addEventListener('click',e=>{const r=cvS.getBoundingClientRect(); selectCyl(Math.floor((e.clientX-r.left)/r.width*NCYL));});
+function flash(t){const h=$('#hintTop'); h.textContent=t; h.style.color='var(--warn)'; clearTimeout(flash.t); flash.t=setTimeout(()=>{h.innerHTML='Kontak <span class="kbd">I</span> · Marş basılı tut <span class="kbd">S</span> · Gaz <span class="kbd">W</span>';h.style.color='';},2500);}
+
+/* ---------- Görünüm kaydı ---------- */
+VIEWS.lab={el:$('#v-lab'),
+  timeScale:()=>timeScale,
+  input(rdt){const S=sim; const cmd=keys.w?1:+rP.value/100; S.pedal+=clamp(cmd-S.pedal,-rdt*5,rdt*5);
+    S.veh.clutchCmd=keys.c?1:+$('#rClutch').value/100; S.veh.brake=keys.b?1:0; S.veh.brakeExt=0;},
+  sample:scSample,
+  post(rdt){if(strobe){const w=Math.abs(sim.omega)*timeScale; visTheta=mod(visTheta+Math.min(w,Math.PI*1.2)*rdt*R2D,720);} else visTheta=sim.theta;},
+  events(evs){for(const ev of evs) if(ev.type==='sweepDone') flash('Çekiş tamamlandı.');},
+  render(rdt){drawEngine(rdt); drawStrip(); drawGauges(rdt); drawScope(); drawCyl(); if(curTab==='dyno'&&sim.dyno.sweep) drawDyno();},
+  slow(){const S=sim;
+    if(curTab==='live') updLive(); else if(curTab==='ve'||curTab==='ign') markOp(); else if(curTab==='dyno') drawDyno();
+    else if(curTab==='mod') MODULES.forEach(m=>{const el=$('#ms_'+m.id); if(el) el.textContent=m.on&&m.status?m.status(S,m):'';});
+    updCylStats(); updateMotored();
+    CH.forEach((ch,i)=>{const el=document.getElementById('cv_'+ch.k); el.textContent=ch.fmt(scBuf[i][(scHead-1+SC_N)%SC_N]);});
+    if(S.ecu.dtcFresh!==VIEWS.lab.lastFresh){VIEWS.lab.lastFresh=S.ecu.dtcFresh; renderDtc();}
+    const cl=$('#pCL'); cl.hidden=ENG.diesel; cl.textContent=S.ecu.cl?'KAPALI DÖNGÜ':'AÇIK DÖNGÜ'; cl.className='pill '+(S.ecu.cl?'on':'');
+    const r=$('#pRev'); r.className='pill '+(S.ecu.revCut||S.ecu.launchCut?'crit':''); r.textContent=S.ecu.launchCut?'KALKIŞ KONTROLÜ':'DEVİR LİMİTİ';},
+  onEngine(){const d=ENG.def;
+    $('#segCyl').innerHTML=Array.from({length:NCYL},(_,i)=>`<button data-v="${i}">${i+1}</button>`).join('');
+    $('#segGear').innerHTML='<button class="act" data-v="0">N</button>'+d.veh.gears.map((_,i)=>`<button data-v="${i+1}">${i+1}</button>`).join('');
+    $('#labSpec').textContent=engineSpecLine(d);
+    selectCyl(0); chScale(); scCount=0; scNext=0; buildLive(); labelTabs(); selCell={ve:null,ign:null}; buildTable('ve'); buildTable('ign');
+    if(curTab==='ve'||curTab==='ign') paintTable(curTab);
+    buildSettings(); renderMods(); renderDtc(); syncFaults(); setKey(sim.key); setLoad('free'); setScale(timeScale); drawDyno();
+    $('#rPedal').value=0; $('#oPedal').textContent='0 %';},
+  key(k,down,e){
+    if(document.activeElement&&document.activeElement.closest&&document.activeElement.closest('table.map')&&(k==='+'||k==='-'||k==='='||k.startsWith('arrow'))) return;
+    if(down){
+      if(e.repeat&&!['w','arrowup'].includes(k)){if(['s','c','b','x'].includes(k)) e.preventDefault(); return;}
+      auInit();
+      if(k==='w'||k==='arrowup'){keys.w=true;e.preventDefault();}
+      else if(k==='i') setKey(!sim.key);
+      else if(k==='s') startOn();
+      else if(k==='c') keys.c=true;
+      else if(k==='b') keys.b=true;
+      else if(k==='x') sim.nitroBtn=true;
+      else if(k==='m') setSound(!soundOn);
+      else if(k==='t'){const ix=(TSCALES.indexOf(timeScale)+1)%TSCALES.length; setScale(TSCALES[ix]);}
+      else if(sim.load==='car'&&/^[0-9]$/.test(k)&&+k<=ENG.def.veh.gears.length) setGear(+k);
+    } else {
+      if(k==='w'||k==='arrowup') keys.w=false; else if(k==='s') startOff(); else if(k==='c') keys.c=false; else if(k==='b') keys.b=false; else if(k==='x') sim.nitroBtn=false;
+    }
+  },
+};
+function engineSpecLine(d){return `${(ENG.Vd*1000).toFixed(1)} L · ${d.layout.toLowerCase()} · ${d.bore} × ${d.stroke} mm · ε ${d.cr}:1 · ${ENG.diesel?'common rail dizel':'port enjeksiyon'}${d.turbo?' · turbo':''} · ateşleme sırası ${d.firing.join('-')}`;}
+
+</script>
+<script>
+/* js/garage.js */
+'use strict';
+/* =====================================================================
+   garage.js — GARAJ: motor seçimi. VIEWS.garage
+   Kart başına fabrika dinamometre eğrisi (def.curve: [rpm, Nm] çiftleri) çizilir.
+   ===================================================================== */
+function dispL(d){return (Math.PI*(d.bore/2000)**2*(d.stroke/1000)*d.firing.length*1000);}
+function renderGarage(){
+  $('#garageGrid').innerHTML=ENGINES.map(d=>{const sel=d.id===curEngine.id, sp=d.spec;
+    return `<article class="eng${sel?' sel':''}" data-id="${d.id}" style="--ec:${d.veh.color}">
+      <div class="eng-top"><span class="eng-tag">${d.tag}</span><span class="eng-fuel">${d.fuel}</span></div>
+      <h3>${d.name}</h3>
+      <div class="eng-sub">${d.layout} · ${dispL(d).toFixed(1)} L${d.turbo?' · turbo '+d.turbo.boost.toFixed(1)+' bar':' · atmosferik'}</div>
+      <canvas class="eng-curve" data-id="${d.id}" aria-label="${d.name} tork ve güç eğrisi"></canvas>
+      <dl class="eng-nums">
+        <div><dt>Tork</dt><dd>${sp?sp.tq[0]+' Nm':'—'}<small>${sp?'@ '+sp.tq[1]:''}</small></dd></div>
+        <div><dt>Güç</dt><dd>${sp?sp.pw[0]+' BG':'—'}<small>${sp?'@ '+sp.pw[1]:''}</small></dd></div>
+        <div><dt>Limit</dt><dd>${d.redline}<small>d/d</small></dd></div>
+      </dl>
+      <p class="eng-blurb">${d.blurb}</p>
+      <div class="eng-veh"><span class="sw"></span>${d.veh.name} · ${d.veh.mass} kg · ${d.veh.gears.length} ileri</div>
+      <div class="row"><button class="btn small ${sel?'':'pri'}" data-act="pick">${sel?'Seçili motor':'Bu motoru seç'}</button><button class="btn small" data-act="lab">Laboratuvarda aç</button></div>
+    </article>`;}).join('');
+  $$('#garageGrid .eng').forEach(card=>card.onclick=ev=>{const b=ev.target.closest('button'); if(!b) return; const id=card.dataset.id;
+    if(id!==curEngine.id){switchEngine(id);}
+    if(b.dataset.act==='lab') showView('lab'); else renderGarage();});
+  drawCurves();
+}
+function drawCurves(){
+  $$('#garageGrid canvas.eng-curve').forEach(cv=>{const d=ENGINES.find(e=>e.id===cv.dataset.id), [g,W,H]=fitCanvas(cv);
+    g.fillStyle=COL.face; g.fillRect(0,0,W,H);
+    g.strokeStyle=COL.line; g.lineWidth=1; g.beginPath(); for(let q=1;q<4;q++){const y=Math.round(H*q/4)+0.5; g.moveTo(0,y); g.lineTo(W,y);} g.stroke();
+    if(!d.curve){g.fillStyle=COL.dim; g.font=`11px ${MONO}`; g.textAlign='center'; g.textBaseline='middle'; g.fillText('eğri yok',W/2,H/2); return;}
+    const xm=Math.ceil(d.redline/1000)*1000+500, tm=Math.max(...d.curve.map(c=>c[1]))*1.15, pm=Math.max(...d.curve.map(c=>c[1]*c[0]))*1.15;
+    const X=n=>6+(W-12)*n/xm;
+    const draw=(f,col,dash)=>{g.strokeStyle=col; g.lineWidth=2; g.setLineDash(dash); g.beginPath(); d.curve.forEach((c,i)=>{const x=X(c[0]),y=H-4-(H-10)*f(c); i?g.lineTo(x,y):g.moveTo(x,y);}); g.stroke(); g.setLineDash([]);};
+    draw(c=>c[1]/tm,d.veh.color,[]); draw(c=>c[1]*c[0]/pm,COL.amber,[4,3]);
+    g.fillStyle=COL.dim; g.font=`9.5px ${MONO}`; g.textAlign='left'; g.textBaseline='top'; g.fillText('tork',6,4); g.fillStyle=COL.amber; g.fillText('güç',40,4);
+    g.fillStyle=COL.dim; g.textAlign='right'; g.fillText(xm/1000+'k d/d',W-6,4);
+  });
+}
+VIEWS.garage={el:$('#v-garage'),
+  timeScale:()=>1,
+  input(rdt){sim.pedal+=clamp(0-sim.pedal,-rdt*5,rdt*5);},
+  onShow(){renderGarage();},
+  onEngine(){if(curView==='garage') renderGarage();},
+};
+window.addEventListener('resize',()=>{if(curView==='garage') drawCurves();});
+
+</script>
+<script>
+'use strict';
+/* açılış */
+$$('#viewNav button').forEach(b=>b.onclick=()=>showView(b.dataset.v));
+let startEng='i4', startView='garage';
+try{startEng=localStorage.getItem('motor.engine')||startEng; startView=localStorage.getItem('motor.view')||startView;}catch(e){}
+if(!VIEWS[startView]) startView='garage';
+switchEngine(startEng);
+showView(startView);
+requestAnimationFrame(frame);
+</script>
+
+</body></html>
