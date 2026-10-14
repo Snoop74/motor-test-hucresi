@@ -130,6 +130,14 @@ function showView(v){
 let lastTs=0, lastFrameWall=0, slowT=0;
 function frame(ts,noRaf){
   lastFrameWall=performance.now();
+  try{tick(ts);}catch(e){if(!frame.err){frame.err=1; console.error(e);} showFatal(e);}
+  if(!noRaf) requestAnimationFrame(frame);
+}
+/* bir çizim/fizik hatası döngüyü öldürmesin; ekranda kısa bir uyarı göster */
+function showFatal(e){let el=$('#fatal'); if(!el){el=document.createElement('div'); el.id='fatal';
+  el.style.cssText='position:fixed;left:16px;bottom:16px;z-index:99;max-width:min(560px,calc(100vw - 32px));background:var(--crit);color:var(--bg);font:12px var(--f-mono);padding:8px 10px;border-radius:4px';
+  document.body.appendChild(el);} el.textContent='Hata: '+(e&&e.message||e)+' — sayfayı yenileyin; sürerse bu metni bana iletin.';}
+function tick(ts){
   const rdt=lastTs?clamp((ts-lastTs)/1000,0,0.05):0.016; lastTs=Math.max(ts,lastTs);
   const S=sim, V=VIEWS[curView];
   if(V&&V.input) V.input(rdt);
@@ -143,7 +151,6 @@ function frame(ts,noRaf){
   S.events.length=0;
   if(V&&V.render) V.render(rdt);
   slowT+=rdt; if(slowT>0.12){slowT=0; V&&V.slow&&V.slow(); updStatus();}
-  if(!noRaf) requestAnimationFrame(frame);
 }
 setInterval(()=>{if(performance.now()-lastFrameWall>250) frame(performance.now(),true);},100); // rAF durursa (arka plan) yedek
 function updStatus(){const S=sim,e=S.ecu,p=$('#pState');

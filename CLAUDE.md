@@ -1,7 +1,7 @@
 # Motor Test Hücresi
 
 Tarayıcı simülatörü: `motor.html` (düzen + CSS) ve `js/` altındaki betikler (Türkçe arayüz, canvas + WebAudio).
-claude.ai artifact olarak yayınlanır (`files` ile js/ dosyaları da gönderilir); bu yüzden motor.html'de
+claude.ai artifact olarak TEK DOSYA yayınlanır: `python build.py <klasör>` js/ betiklerini HTML'e gömer (ayrı dosyalı yayın görüntüleyicide çalışmadı); bu yüzden motor.html'de
 `<!doctype>/<html>/<head>/<body>` etiketleri YOK (yayında eklenir).
 Yerel test: `./.mktest.sh` → `.test.html` (doctype + önbellek kırıcı), sonra `python -m http.server` ile açın.
 
